@@ -143,6 +143,44 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
 
     boolean canMoveNoteToAnotherAccounts = false;
 
+    private void createLocalAccount() {
+        // 创建一个本地使用的虚拟账户
+        Account localAccount = new Account();
+        localAccount.setId(1L);
+        localAccount.setUrl("file://localhost");
+        localAccount.setUserName("localuser");
+        localAccount.setAccountName("Local Account");
+        localAccount.setCapabilitiesETag(null);
+        localAccount.setColor(256); // 使用默认颜色
+
+        executor.submit(() -> {
+            try {
+                // 使用正确的参数调用 addAccount 方法
+                mainViewModel.addAccount(
+                        localAccount.getUrl(),
+                        localAccount.getUserName(),
+                        localAccount.getAccountName(),
+                        null,
+                        localAccount.getDisplayName(),
+                        new IResponseCallback<Account>() {
+                            @Override
+                            public void onSuccess(@NonNull Account account) {
+                                // 创建成功
+                            }
+
+                            @Override
+                            public void onError(@NonNull Throwable throwable) {
+                                // 创建失败
+                            }
+                        }
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            runOnUiThread(() -> mainViewModel.postCurrentAccount(localAccount));
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen.installSplashScreen(this);
@@ -173,7 +211,7 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
 
         mainViewModel.getAccountsCount().observe(this, (count) -> {
             if (count == 0) {
-                startActivityForResult(new Intent(this, ImportAccountActivity.class), ImportAccountActivity.REQUEST_CODE_IMPORT_ACCOUNT);
+                createLocalAccount();
             } else {
                 executor.submit(() -> {
                     try {
