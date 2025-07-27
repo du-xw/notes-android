@@ -8,6 +8,7 @@ package it.niedermann.owncloud.notes.edit;
 
 import static java.lang.Boolean.TRUE;
 import static it.niedermann.owncloud.notes.edit.EditNoteActivity.ACTION_SHORTCUT;
+import static it.niedermann.owncloud.notes.main.MainActivity.LOCAL_USER_NAME;
 import static it.niedermann.owncloud.notes.shared.util.WidgetUtil.pendingIntentFlagCompat;
 
 import android.app.PendingIntent;
@@ -98,9 +99,8 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         executor.submit(() -> {
-            try {
-                final var ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(requireContext().getApplicationContext());
-                this.localAccount = repo.getAccountByName(ssoAccount.name);
+//                final var ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(requireContext().getApplicationContext());
+                this.localAccount = repo.getAccountByName(LOCAL_USER_NAME);
 
                 if (savedInstanceState == null) {
                     final long id = requireArguments().getLong(PARAM_NOTE_ID);
@@ -140,9 +140,6 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
                     requireActivity().runOnUiThread(() -> onNoteLoaded(note));
                     requireActivity().invalidateOptionsMenu();
                 }
-            } catch (NextcloudFilesAppAccountNotFoundException | NoCurrentAccountSelectedException e) {
-                e.printStackTrace();
-            }
         });
         setHasOptionsMenu(true);
     }

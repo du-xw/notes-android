@@ -128,14 +128,13 @@ public class MainViewModel extends AndroidViewModel {
 
     public void postCurrentAccount(@NonNull Account account) {
         state.set(KEY_CURRENT_ACCOUNT, account);
-        BrandingUtil.saveBrandColor(getApplication(), account.getColor());
-        SingleAccountHelper.commitCurrentAccount(getApplication(), account.getAccountName());
+        BrandingUtil.saveBrandColor(getApplication(), 256);
 
         final var currentAccount = this.currentAccount.getValue();
         // If only ETag or colors change, we must not reset the navigation
         // TODO in the long term we should store the last NavigationCategory for each Account
         if (currentAccount == null || currentAccount.getId() != account.getId()) {
-            this.currentAccount.setValue(account);
+//            this.currentAccount.setValue(account);
             this.searchTerm.setValue("");
             this.selectedCategory.setValue(new NavigationCategory(RECENT));
         }
@@ -401,6 +400,7 @@ public class MainViewModel extends AndroidViewModel {
      */
     public void synchronizeCapabilities(@NonNull Account localAccount, @NonNull IResponseCallback<Void> callback) {
         executor.submit(() -> {
+            Log.v("duxiwei", "repo.isSyncPossible()="+repo.isSyncPossible());
             if (!repo.isSyncPossible()) {
                 repo.updateNetworkStatus();
             }
@@ -450,14 +450,14 @@ public class MainViewModel extends AndroidViewModel {
                 repo.updateNetworkStatus();
             }
             if (repo.isSyncPossible()) {
-                repo.scheduleSync(currentAccount, false);
+//                repo.scheduleSync(currentAccount, false);
 
-                try {
-                    final var ssoAccount = AccountImporter.getSingleSignOnAccount(context, currentAccount.getAccountName());
-                    CapabilitiesClient.getCapabilities(context, ssoAccount, null, ApiProvider.getInstance());
-                } catch (Throwable t) {
-                    Log_OC.e(TAG, t.getMessage());
-                }
+//                try {
+//                    final var ssoAccount = AccountImporter.getSingleSignOnAccount(context, currentAccount.getAccountName());
+////                    CapabilitiesClient.getCapabilities(context, null, null, ApiProvider.getInstance());
+//                } catch (Throwable t) {
+//                    Log_OC.e(TAG, t.getMessage());
+//                }
 
                 callback.onSuccess(null);
             } else { // Sync is not possible

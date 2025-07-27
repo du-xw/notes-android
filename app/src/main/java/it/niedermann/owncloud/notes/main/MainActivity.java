@@ -100,6 +100,7 @@ import it.niedermann.owncloud.notes.persistence.CapabilitiesClient;
 import it.niedermann.owncloud.notes.persistence.CapabilitiesWorker;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.persistence.entity.Note;
+import it.niedermann.owncloud.notes.shared.model.Capabilities;
 import it.niedermann.owncloud.notes.shared.model.CategorySortingMethod;
 import it.niedermann.owncloud.notes.shared.model.IResponseCallback;
 import it.niedermann.owncloud.notes.shared.model.NavigationCategory;
@@ -122,6 +123,7 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
     public static final String ADAPTER_KEY_STARRED = "starred";
     public static final String ADAPTER_KEY_UNCATEGORIZED = "uncategorized";
 
+    public static final String LOCAL_USER_NAME = "localuser";
     private static final int REQUEST_CODE_CREATE_NOTE = 0;
     private static final int REQUEST_CODE_SERVER_SETTINGS = 1;
 
@@ -141,18 +143,33 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
     private RecyclerView listView;
     private ActionMode mActionMode;
 
+    private Account localAccount;
     boolean canMoveNoteToAnotherAccounts = false;
+ private Capabilities capabilities = createLocalCapabilities();
+    private Capabilities createLocalCapabilities() {
+        Capabilities capabilities = new Capabilities();
+
+        // 设置默认值
+        capabilities.setETag(null); // 本地账户不需要 ETag
+        capabilities.setApiVersion("[\"1.0\"]"); // 设置默认 API 版本
+        capabilities.setColor(256); // 使用默认品牌颜色
+        capabilities.setDirectEditingAvailable(false); // 本地账户不支持直接编辑
+
+        // 可以根据需要设置其他默认属性
+        return capabilities;
+    }
 
     private void createLocalAccount() {
         // 创建一个本地使用的虚拟账户
-        Account localAccount = new Account();
-        localAccount.setId(1L);
-        localAccount.setUrl("file://localhost");
-        localAccount.setUserName("localuser");
-        localAccount.setAccountName("Local Account");
-        localAccount.setCapabilitiesETag(null);
-        localAccount.setColor(256); // 使用默认颜色
-
+        if (localAccount == null ) {
+            localAccount = new Account();
+            localAccount.setId(1L);
+            localAccount.setUrl("file://localhost");
+            localAccount.setUserName("localuser");
+            localAccount.setAccountName("Local Account");
+            localAccount.setCapabilitiesETag(null);
+            localAccount.setColor(256); // 使用默认颜色
+        }
         executor.submit(() -> {
             try {
                 // 使用正确的参数调用 addAccount 方法
@@ -160,7 +177,7 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                         localAccount.getUrl(),
                         localAccount.getUserName(),
                         localAccount.getAccountName(),
-                        null,
+                        capabilities,
                         localAccount.getDisplayName(),
                         new IResponseCallback<Account>() {
                             @Override
@@ -214,15 +231,8 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                 createLocalAccount();
             } else {
                 executor.submit(() -> {
-                    try {
-                        final var account = mainViewModel.getLocalAccountByAccountName(SingleAccountHelper.getCurrentSingleSignOnAccount(getApplicationContext()).name);
-                        runOnUiThread(() -> mainViewModel.postCurrentAccount(account));
-                    } catch (NextcloudFilesAppAccountNotFoundException e) {
-                        // Verbose log output for https://github.com/nextcloud/notes-android/issues/1256
-                        runOnUiThread(() -> showAppAccountNotFoundAlertDialog(e));
-                    } catch (NoCurrentAccountSelectedException e) {
-                        runOnUiThread(() -> ExceptionDialogFragment.newInstance(e).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName()));
-                    }
+                    final var account = mainViewModel.getLocalAccountByAccountName(LOCAL_USER_NAME);
+                    runOnUiThread(() -> mainViewModel.postCurrentAccount(localAccount));
                 });
             }
         });
@@ -316,13 +326,13 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
         mainViewModel.getNavigationCategories().observe(this, navigationItems -> this.adapterCategories.setItems(navigationItems));
         mainViewModel.getCurrentAccount().observe(this, (nextAccount) -> {
             fabCreate.hide();
-            Glide
-                    .with(this)
-                    .load(nextAccount.getUrl() + "/index.php/avatar/" + Uri.encode(nextAccount.getUserName()) + "/64")
-                    .placeholder(R.drawable.ic_account_circle_grey_24dp)
-                    .error(R.drawable.ic_account_circle_grey_24dp)
-                    .apply(RequestOptions.circleCropTransform())
-                    .into(activityBinding.launchAccountSwitcher);
+//            Glide
+//                    .with(this)
+//                    .load(nextAccount.getUrl() + "/index.php/avatar/" + Uri.encode(nextAccount.getUserName()) + "/64")
+//                    .placeholder(R.drawable.ic_account_circle_grey_24dp)
+//                    .error(R.drawable.ic_account_circle_grey_24dp)
+//                    .apply(RequestOptions.circleCropTransform())
+//                    .into(activityBinding.launchAccountSwitcher);
 
             mainViewModel.synchronizeNotes(this, nextAccount, new IResponseCallback<>() {
                 @Override
@@ -360,7 +370,7 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                     } else {
                         startActivityForResult(menuItem.getIntent(), resultCode);
                     }
-                }, nextAccount.getColor());
+                }, 256);
 
                 binding.navigationMenu.setAdapter(menuAdapter);
             } else {

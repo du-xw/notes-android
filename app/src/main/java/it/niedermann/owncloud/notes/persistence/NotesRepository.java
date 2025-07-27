@@ -178,26 +178,26 @@ public class NotesRepository {
     }
 
     public void updateNetworkStatus() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+//        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+//
+//        if (connectivityManager == null) {
+//            handleFailedNetworkStatus("ConnectivityManager is null");
+//            return;
+//        }
+//
+//        Network network = connectivityManager.getActiveNetwork();
+//        if (network == null) {
+//            handleFailedNetworkStatus("No network connection");
+//            return;
+//        }
+//
+//        NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
+//        if (networkCapabilities == null) {
+//            handleFailedNetworkStatus("NetworkCapabilities is null");
+//            return;
+//        }
 
-        if (connectivityManager == null) {
-            handleFailedNetworkStatus("ConnectivityManager is null");
-            return;
-        }
-
-        Network network = connectivityManager.getActiveNetwork();
-        if (network == null) {
-            handleFailedNetworkStatus("No network connection");
-            return;
-        }
-
-        NetworkCapabilities networkCapabilities = connectivityManager.getNetworkCapabilities(network);
-        if (networkCapabilities == null) {
-            handleFailedNetworkStatus("NetworkCapabilities is null");
-            return;
-        }
-
-        handleNetworkStatus(networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI));
+        handleNetworkStatus(true);
     }
 
     private void observeNetworkStatus(ConnectionLiveData.ConnectionType connectionType) {
@@ -241,41 +241,41 @@ public class NotesRepository {
         if (account == null) {
             callback.onError(new Exception("Could not read created account."));
         } else {
-            if (isSyncPossible()) {
-                syncActive.put(account.getId(), true);
-                try {
-                    Log.d(TAG, "… starting now");
-                    final NotesImportTask importTask = new NotesImportTask(context, this, account, importExecutor, apiProvider);
-                    return importTask.importNotes(new IResponseCallback<>() {
-                        @Override
-                        public void onSuccess(Void result) {
-                            callback.onSuccess(account);
-                        }
-
-                        @Override
-                        public void onError(@NonNull Throwable t) {
-                            Log.e(TAG, "… Error while importing " + account.getAccountName() + ": " + t.getMessage());
-                            deleteAccount(account);
-                            SingleAccountHelper.commitCurrentAccount(context, null);
-                            callback.onError(t);
-                        }
-                    });
-                } catch (NextcloudFilesAppAccountNotFoundException e) {
-                    Log.e(TAG, "… Could not find " + SingleSignOnAccount.class.getSimpleName() + " for account name " + account.getAccountName());
-                    importExecutor.submit(() -> {
-                        deleteAccount(account);
-                        SingleAccountHelper.commitCurrentAccount(context, null);
-                        callback.onError(e);
-                    });
-                }
-            } else {
-                Log.e(TAG, "… No network connection available to import " + account.getAccountName());
-                importExecutor.submit(() -> {
-                    deleteAccount(account);
-                    SingleAccountHelper.commitCurrentAccount(context, null);
-                    callback.onError(new NetworkErrorException());
-                });
-            }
+//            if (isSyncPossible()) {
+//                syncActive.put(account.getId(), true);
+//                try {
+//                    Log.d(TAG, "… starting now");
+//                    final NotesImportTask importTask = new NotesImportTask(context, this, account, importExecutor, apiProvider);
+//                    return importTask.importNotes(new IResponseCallback<>() {
+//                        @Override
+//                        public void onSuccess(Void result) {
+//                            callback.onSuccess(account);
+//                        }
+//
+//                        @Override
+//                        public void onError(@NonNull Throwable t) {
+//                            Log.e(TAG, "… Error while importing " + account.getAccountName() + ": " + t.getMessage());
+//                            deleteAccount(account);
+//                            SingleAccountHelper.commitCurrentAccount(context, null);
+//                            callback.onError(t);
+//                        }
+//                    });
+//                } catch (NextcloudFilesAppAccountNotFoundException e) {
+//                    Log.e(TAG, "… Could not find " + SingleSignOnAccount.class.getSimpleName() + " for account name " + account.getAccountName());
+//                    importExecutor.submit(() -> {
+//                        deleteAccount(account);
+//                        SingleAccountHelper.commitCurrentAccount(context, null);
+//                        callback.onError(e);
+//                    });
+//                }
+//            } else {
+//                Log.e(TAG, "… No network connection available to import " + account.getAccountName());
+//                importExecutor.submit(() -> {
+//                    deleteAccount(account);
+//                    SingleAccountHelper.commitCurrentAccount(context, null);
+//                    callback.onError(new NetworkErrorException());
+//                });
+//            }
         }
         return new MutableLiveData<>(new ImportStatus());
     }
@@ -886,7 +886,7 @@ public class NotesRepository {
      * @param onlyLocalChanges Whether to only push local changes to the server or to also load the whole list of notes from the server.
      */
     public synchronized void scheduleSync(@Nullable Account account, boolean onlyLocalChanges) {
-        if (account == null) {
+         if (account == null) {
             Log.i(TAG, SingleSignOnAccount.class.getSimpleName() + " is null. Is this a local account?");
         } else {
             syncActive.putIfAbsent(account.getId(), false);

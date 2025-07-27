@@ -6,6 +6,7 @@
  */
 package it.niedermann.owncloud.notes.edit;
 
+import static it.niedermann.owncloud.notes.main.MainActivity.LOCAL_USER_NAME;
 import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.FAVORITES;
 
 import android.content.Intent;
@@ -160,13 +161,10 @@ public class EditNoteActivity extends LockedActivity implements BaseNoteFragment
     private long getAccountId() {
         final long idParam = getIntent().getLongExtra(PARAM_ACCOUNT_ID, 0);
         if (idParam == 0) {
-            try {
-                final SingleSignOnAccount ssoAcc = SingleAccountHelper.getCurrentSingleSignOnAccount(this);
-                return repo.getAccountByName(ssoAcc.name).getId();
-            } catch (NextcloudFilesAppAccountNotFoundException |
-                     NoCurrentAccountSelectedException e) {
-                Log.w(TAG, "getAccountId: no current account", e);
-            }
+//             long id = repo.getAccountByName(LOCAL_USER_NAME).getId();
+//            if (id != 0){
+//                return id;
+//            }
         }
         return idParam;
     }
