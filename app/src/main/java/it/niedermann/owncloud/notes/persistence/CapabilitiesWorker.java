@@ -49,32 +49,32 @@ public class CapabilitiesWorker extends Worker {
     @Override
     public Result doWork() {
         final var repo = NotesRepository.getInstance(getApplicationContext());
-        for (final var account : repo.getAccounts()) {
-            try {
-                final var ssoAccount = AccountImporter.getSingleSignOnAccount(getApplicationContext(), account.getAccountName());
-
-                Log.i(TAG, "Refreshing capabilities for " + ssoAccount.name);
-                final var capabilities = CapabilitiesClient.getCapabilities(getApplicationContext(), ssoAccount, account.getCapabilitiesETag(), ApiProvider.getInstance());
-                repo.updateCapabilitiesETag(account.getId(), capabilities.getETag());
-                repo.updateBrand(account.getId(), capabilities.getColor());
-                repo.updateApiVersion(account.getId(), capabilities.getApiVersion());
-                repo.updateDirectEditingAvailable(account.getId(), capabilities.isDirectEditingAvailable());
-                Log.i(TAG, capabilities.toString());
-                repo.updateDisplayName(account.getId(), CapabilitiesClient.getDisplayName(getApplicationContext(), ssoAccount, ApiProvider.getInstance()));
-            } catch (Throwable e) {
-                if (e instanceof NextcloudHttpRequestFailedException) {
-                    if (((NextcloudHttpRequestFailedException) e).getStatusCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                        Log.i(TAG, "Capabilities not modified.");
-                        return Result.success();
-                    } else if (((NextcloudHttpRequestFailedException) e).getStatusCode() == HttpURLConnection.HTTP_UNAVAILABLE) {
-                        Log.i(TAG, "Server is in maintenance mode.");
-                        return Result.success();
-                    }
-                }
-                e.printStackTrace();
-                return Result.failure();
-            }
-        }
+//        for (final var account : repo.getAccounts()) {
+//            try {
+//                final var ssoAccount = AccountImporter.getSingleSignOnAccount(getApplicationContext(), account.getAccountName());
+//
+//                Log.i(TAG, "Refreshing capabilities for " + ssoAccount.name);
+//                final var capabilities = CapabilitiesClient.getCapabilities(getApplicationContext(), ssoAccount, account.getCapabilitiesETag(), ApiProvider.getInstance());
+//                repo.updateCapabilitiesETag(account.getId(), capabilities.getETag());
+//                repo.updateBrand(account.getId(), capabilities.getColor());
+//                repo.updateApiVersion(account.getId(), capabilities.getApiVersion());
+//                repo.updateDirectEditingAvailable(account.getId(), capabilities.isDirectEditingAvailable());
+//                Log.i(TAG, capabilities.toString());
+//                repo.updateDisplayName(account.getId(), CapabilitiesClient.getDisplayName(getApplicationContext(), ssoAccount, ApiProvider.getInstance()));
+//            } catch (Throwable e) {
+//                if (e instanceof NextcloudHttpRequestFailedException) {
+//                    if (((NextcloudHttpRequestFailedException) e).getStatusCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
+//                        Log.i(TAG, "Capabilities not modified.");
+//                        return Result.success();
+//                    } else if (((NextcloudHttpRequestFailedException) e).getStatusCode() == HttpURLConnection.HTTP_UNAVAILABLE) {
+//                        Log.i(TAG, "Server is in maintenance mode.");
+//                        return Result.success();
+//                    }
+//                }
+//                e.printStackTrace();
+//                return Result.failure();
+//            }
+//        }
         return Result.success();
     }
 

@@ -377,6 +377,9 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                 menuAdapter.updateAccount(this, nextAccount);
             }
         });
+        runOnUiThread(() -> {
+            binding.activityNotesListView.progressCircular.setVisibility(GONE);
+        });
     }
 
     private void showAppAccountNotFoundAlertDialog(NextcloudFilesAppAccountNotFoundException e) {
@@ -820,6 +823,9 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                 }
             }
         }
+        runOnUiThread(() -> {
+            binding.activityNotesListView.progressCircular.setVisibility(GONE);
+        });
     }
 
     @Override
