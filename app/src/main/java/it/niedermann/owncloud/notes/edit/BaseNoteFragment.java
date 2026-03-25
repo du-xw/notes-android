@@ -95,48 +95,56 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        executor.submit(() -> {
-//                final var ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(requireContext().getApplicationContext());
-                this.localAccount = repo.getAccountByName(LOCAL_USER_NAME);
+        /*
+         * 必须在返回 onPause/onCloseNote 之前完成 note 初始化。此前使用 executor 异步加载会导致用户快速按返回键时
+         * note 仍为 null，saveNote 被跳过、新笔记不会写入列表（Room 已 allowMainThreadQueries）。
+         */
+        this.localAccount = repo.getAccountByName(LOCAL_USER_NAME);
+        if (this.localAccount == null) {
+            this.localAccount = repo.getOrCreateLocalAccount();
+        }
 
-                if (savedInstanceState == null) {
-                    final long id = requireArguments().getLong(PARAM_NOTE_ID);
-                    if (id > 0) {
-                        final long accountId = requireArguments().getLong(PARAM_ACCOUNT_ID);
-                        if (accountId > 0) {
-                            /* Switch account if account id has been provided */
-                            this.localAccount = repo.getAccountById(accountId);
-                        }
-                        isNew = false;
-                        note = originalNote = repo.getNoteById(id);
-                        requireActivity().runOnUiThread(() -> onNoteLoaded(note));
-                        requireActivity().invalidateOptionsMenu();
+        if (savedInstanceState == null) {
+            final long id = requireArguments().getLong(PARAM_NOTE_ID);
+            if (id > 0) {
+                final long accountId = requireArguments().getLong(PARAM_ACCOUNT_ID);
+                if (accountId > 0) {
+                    this.localAccount = repo.getAccountById(accountId);
+                }
+                isNew = false;
+                note = originalNote = repo.getNoteById(id);
+                if (note == null) {
+                    Log.e(TAG, "Note id " + id + " not found in database");
+                    requireActivity().finish();
+                    return;
+                }
+                onNoteLoaded(note);
+                requireActivity().invalidateOptionsMenu();
+            } else {
+                final var paramNote = (Note) requireArguments().getSerializable(PARAM_NEWNOTE);
+                final var content = requireArguments().getString(PARAM_CONTENT);
+                if (paramNote == null) {
+                    if (content == null) {
+                        throw new IllegalArgumentException(PARAM_NOTE_ID + " is not given, argument " + PARAM_NEWNOTE + " is missing and " + PARAM_CONTENT + " is missing.");
                     } else {
-                        final var paramNote = (Note) requireArguments().getSerializable(PARAM_NEWNOTE);
-                        final var content = requireArguments().getString(PARAM_CONTENT);
-                        if (paramNote == null) {
-                            if (content == null) {
-                                throw new IllegalArgumentException(PARAM_NOTE_ID + " is not given, argument " + PARAM_NEWNOTE + " is missing and " + PARAM_CONTENT + " is missing.");
-                            } else {
-                                note = new Note(-1, null, Calendar.getInstance(), NoteUtil.generateNoteTitle(content), content, getString(R.string.category_readonly), false, null, DBStatus.VOID, -1, "", 0, false, false);
-                                requireActivity().runOnUiThread(() -> onNoteLoaded(note));
-                                requireActivity().invalidateOptionsMenu();
-                            }
-                        } else {
-                            paramNote.setStatus(DBStatus.LOCAL_EDITED);
-                            note = repo.addNote(localAccount.getId(), paramNote);
-                            originalNote = null;
-                            requireActivity().runOnUiThread(() -> onNoteLoaded(note));
-                            requireActivity().invalidateOptionsMenu();
-                        }
+                        note = new Note(-1, null, Calendar.getInstance(), NoteUtil.generateNoteTitle(content), content, getString(R.string.category_readonly), false, null, DBStatus.VOID, -1, "", 0, false, false);
+                        onNoteLoaded(note);
+                        requireActivity().invalidateOptionsMenu();
                     }
                 } else {
-                    note = (Note) savedInstanceState.getSerializable(SAVEDKEY_NOTE);
-                    originalNote = (Note) savedInstanceState.getSerializable(SAVEDKEY_ORIGINAL_NOTE);
-                    requireActivity().runOnUiThread(() -> onNoteLoaded(note));
+                    paramNote.setStatus(DBStatus.LOCAL_EDITED);
+                    note = repo.addNote(localAccount.getId(), paramNote);
+                    originalNote = null;
+                    onNoteLoaded(note);
                     requireActivity().invalidateOptionsMenu();
                 }
-        });
+            }
+        } else {
+            note = (Note) savedInstanceState.getSerializable(SAVEDKEY_NOTE);
+            originalNote = (Note) savedInstanceState.getSerializable(SAVEDKEY_ORIGINAL_NOTE);
+            onNoteLoaded(note);
+            requireActivity().invalidateOptionsMenu();
+        }
         setHasOptionsMenu(true);
     }
 
@@ -225,6 +233,10 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         final int itemId = item.getItemId();
+        if (note == null || localAccount == null) {
+            Log.w(TAG, "onOptionsItemSelected ignored: note or localAccount is null");
+            return super.onOptionsItemSelected(item);
+        }
         if (itemId == R.id.menu_cancel) {
             executor.submit(() -> {
                 if (originalNote == null) {
@@ -281,11 +293,18 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
     }
 
     protected void shareNote() {
+        if (note == null) {
+            return;
+        }
         ShareUtil.openShareDialog(requireContext(), note.getTitle(), note.getContent());
     }
 
     @CallSuper
     protected void onNoteLoaded(Note note) {
+        if (note == null) {
+            Log.e(TAG, "onNoteLoaded called with null note");
+            return;
+        }
         this.originalScrollY = note.getScrollY();
         scrollToY(originalScrollY);
         final var scrollView = getScrollView();
@@ -314,6 +333,9 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
             Log.e(TAG, "note is null, onCloseNote");
             return;
         }
+        if (localAccount == null) {
+            return;
+        }
 
         if (!titleModified && originalNote == null && getContent().isEmpty()) {
             repo.deleteNoteAndSync(localAccount, note.getId());
@@ -329,6 +351,11 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
         Log.d(TAG, "saveData()");
         if (note == null) {
             Log.e(TAG, "note is null, saveNote");
+            return;
+        }
+
+        if (localAccount == null) {
+            Log.e(TAG, "localAccount is null, saveNote");
             return;
         }
 

@@ -156,13 +156,14 @@ public class EditNoteActivity extends LockedActivity implements BaseNoteFragment
 
     private long getAccountId() {
         final long idParam = getIntent().getLongExtra(PARAM_ACCOUNT_ID, 0);
-        if (idParam == 0) {
-//             long id = repo.getAccountByName(LOCAL_USER_NAME).getId();
-//            if (id != 0){
-//                return id;
-//            }
+        if (idParam != 0) {
+            return idParam;
         }
-        return idParam;
+        final Account acc = repo.getAccountByName(LOCAL_USER_NAME);
+        if (acc != null) {
+            return acc.getId();
+        }
+        return 0;
     }
 
 
@@ -354,7 +355,7 @@ public class EditNoteActivity extends LockedActivity implements BaseNoteFragment
 
     @Override
     public void onBackPressed() {
-        super.onBackPressed();
+        // 仅走 close()：先由 Fragment.onPause 持久化内容，再统一导航，避免与 super.onBackPressed() 竞态导致未保存就销毁
         close();
     }
 
@@ -397,7 +398,9 @@ public class EditNoteActivity extends LockedActivity implements BaseNoteFragment
         } else if (fragment instanceof NoteDirectEditFragment) {
             preferences.edit().putString(prefKeyLastMode, getString(R.string.pref_value_mode_direct_edit)).apply();
         }
-        fragment.onCloseNote();
+        if (fragment != null) {
+            fragment.onCloseNote();
+        }
 // 发送广播通知 MainActivity 刷新
         Intent broadcastIntent = new Intent("notes.refresh");
         LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent);

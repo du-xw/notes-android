@@ -116,18 +116,18 @@ public class MainViewModel extends AndroidViewModel {
         return distinctUntilChanged(currentAccount);
     }
 
+    @MainThread
     public void postCurrentAccount(@NonNull Account account) {
         state.set(KEY_CURRENT_ACCOUNT, account);
-        BrandingUtil.saveBrandColor(getApplication(), 256);
+        BrandingUtil.saveBrandColor(getApplication(), account.getColor());
 
-        final var currentAccount = this.currentAccount.getValue();
-        // If only ETag or colors change, we must not reset the navigation
-        // TODO in the long term we should store the last NavigationCategory for each Account
-        if (currentAccount == null || currentAccount.getId() != account.getId()) {
-//            this.currentAccount.setValue(account);
+        final Account previous = this.currentAccount.getValue();
+        // 切换账户时重置搜索与导航；同一账户仅更新品牌色等时保留列表状态
+        if (previous == null || previous.getId() != account.getId()) {
             this.searchTerm.setValue("");
             this.selectedCategory.setValue(new NavigationCategory(RECENT));
         }
+        this.currentAccount.setValue(account);
     }
 
     @NonNull

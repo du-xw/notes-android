@@ -17,6 +17,7 @@ import static it.niedermann.owncloud.notes.widget.notelist.NoteListWidget.update
 import static it.niedermann.owncloud.notes.widget.singlenote.SingleNoteWidget.updateSingleNoteWidgets;
 
 import android.accounts.NetworkErrorException;
+import android.graphics.Color;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -86,6 +87,9 @@ import it.niedermann.owncloud.notes.shared.util.NoteUtil;
 public class NotesRepository {
 
     private static final String TAG = NotesRepository.class.getSimpleName();
+
+    /** 与 {@link it.niedermann.owncloud.notes.main.MainActivity#LOCAL_USER_NAME} 一致 */
+    private static final String LOCAL_ACCOUNT_NAME = "localuser";
 
     private static NotesRepository instance;
 
@@ -279,6 +283,35 @@ public class NotesRepository {
 
     public Account getAccountById(long accountId) {
         return db.getAccountDao().getAccountById(accountId);
+    }
+
+    /**
+     * 同步创建默认本地账户（若尚不存在）。用于编辑页早于主界面完成账户初始化等场景；依赖 Room {@code allowMainThreadQueries}。
+     */
+    @WorkerThread
+    public synchronized Account getOrCreateLocalAccount() {
+        Account existing = getAccountByName(LOCAL_ACCOUNT_NAME);
+        if (existing != null) {
+            return existing;
+        }
+        final Capabilities capabilities = new Capabilities();
+        capabilities.setETag(null);
+        capabilities.setApiVersion("[\"1.0\"]");
+        capabilities.setDirectEditingAvailable(false);
+        capabilities.setColor(Color.parseColor("#0082C9"));
+        db.getCapabilitiesDao().insert(capabilities);
+        final long insertedId = db.getAccountDao().insert(new Account(
+                "file://localhost",
+                "localuser",
+                LOCAL_ACCOUNT_NAME,
+                "Local",
+                capabilities
+        ));
+        final Account created = db.getAccountDao().getAccountById(insertedId);
+        if (created == null) {
+            throw new IllegalStateException("Could not read created local account");
+        }
+        return created;
     }
 
     public LiveData<List<Account>> getAccounts$() {
