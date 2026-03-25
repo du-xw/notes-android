@@ -16,14 +16,11 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import it.niedermann.owncloud.notes.main.MainActivity;
 import it.niedermann.owncloud.notes.persistence.NotesRepository;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.shared.model.IResponseCallback;
@@ -41,10 +38,11 @@ public class ManageAccountsViewModel extends AndroidViewModel {
     }
 
     public void getCurrentAccount(@NonNull Context context, @NonNull IResponseCallback<Account> callback) {
-        try {
-            callback.onSuccess(repo.getAccountByName((SingleAccountHelper.getCurrentSingleSignOnAccount(context).name)));
-        } catch (NextcloudFilesAppAccountNotFoundException | NoCurrentAccountSelectedException e) {
-            callback.onError(e);
+        final Account account = repo.getAccountByName(MainActivity.LOCAL_USER_NAME);
+        if (account != null) {
+            callback.onSuccess(account);
+        } else {
+            callback.onError(new IllegalStateException("No local account"));
         }
     }
 
@@ -72,7 +70,7 @@ public class ManageAccountsViewModel extends AndroidViewModel {
     }
 
     public void selectAccount(@Nullable Account account, @NonNull Context context) {
-        SingleAccountHelper.commitCurrentAccount(context, (account == null) ? null : account.getAccountName());
+        // 纯本地模式：无需同步 SSO 当前账户
     }
 
     public void countUnsynchronizedNotes(long accountId, @NonNull IResponseCallback<Long> callback) {

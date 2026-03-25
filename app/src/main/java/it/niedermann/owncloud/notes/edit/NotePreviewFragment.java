@@ -21,7 +21,6 @@ import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ScrollView;
-import android.widget.Toast;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -31,17 +30,12 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener;
 
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-import com.owncloud.android.lib.common.utils.Log_OC;
 
 import it.niedermann.owncloud.notes.R;
 import it.niedermann.owncloud.notes.branding.BrandingUtil;
 import it.niedermann.owncloud.notes.databinding.FragmentNotePreviewBinding;
 import it.niedermann.owncloud.notes.persistence.entity.Note;
 import it.niedermann.owncloud.notes.shared.model.ISyncCallback;
-import it.niedermann.owncloud.notes.shared.util.SSOUtil;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function0;
 
@@ -193,34 +187,22 @@ public class NotePreviewFragment extends SearchableBaseNoteFragment implements O
 
     @Override
     public void onRefresh() {
-        if (noteLoaded && repo.isSyncPossible() && SSOUtil.isConfigured(getContext())) {
-            binding.swiperefreshlayout.setRefreshing(true);
-            lifecycleScopeIOJob(() -> {
-                try {
-                    final var account = repo.getAccountByName(SingleAccountHelper.getCurrentSingleSignOnAccount(requireContext()).name);
-
-                    repo.addCallbackPull(account, () -> {
-                        note = repo.getNoteById(note.getId());
-                        final String content = note.getContent();
-                        changedText = content;
-
-                        onMainThread(() -> {
-                            binding.singleNoteContent.setMarkdownString(content);
-                            binding.swiperefreshlayout.setRefreshing(false);
-                            return Unit.INSTANCE;
-                        });
-                    });
-
-                    repo.scheduleSync(account, false);
-                } catch (Exception e) {
-                    Log_OC.e(TAG, "onRefresh exception: " + e);
-                }
+        if (!noteLoaded) {
+            binding.swiperefreshlayout.setRefreshing(false);
+            return;
+        }
+        binding.swiperefreshlayout.setRefreshing(true);
+        lifecycleScopeIOJob(() -> {
+            note = repo.getNoteById(note.getId());
+            final String content = note.getContent();
+            changedText = content;
+            onMainThread(() -> {
+                binding.singleNoteContent.setMarkdownString(content);
+                binding.swiperefreshlayout.setRefreshing(false);
                 return Unit.INSTANCE;
             });
-        } else {
-            binding.swiperefreshlayout.setRefreshing(false);
-            Toast.makeText(requireContext(), getString(R.string.error_sync, getString(R.string.error_no_network)), Toast.LENGTH_LONG).show();
-        }
+            return Unit.INSTANCE;
+        });
     }
 
     @Override

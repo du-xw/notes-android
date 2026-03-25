@@ -30,6 +30,11 @@ buildscript {
     }
 }
 
+// 供子模块（如 :app）依赖解析使用；勿放在 buildscript.ext 内
+ext {
+    nextcloudAndroidCommonLib = "0.25.0"
+}
+
 allprojects {
     repositories {
         mavenCentral()

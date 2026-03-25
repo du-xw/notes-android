@@ -33,13 +33,10 @@ import it.niedermann.owncloud.notes.persistence.sync.OcsAPI;
 import it.niedermann.owncloud.notes.persistence.sync.ShareAPI;
 import it.niedermann.owncloud.notes.shared.model.ApiVersion;
 import it.niedermann.owncloud.notes.shared.model.Capabilities;
-import okhttp3.ResponseBody;
 import retrofit2.NextcloudRetrofitApiBuilder;
-import retrofit2.Retrofit;
 
 /**
- * Since creating APIs via {@link Retrofit} uses reflection and {@link NextcloudAPI} <a href="https://github.com/nextcloud/Android-SingleSignOn/issues/120#issuecomment-540069990">is supposed to stay alive as long as possible</a>, those artifacts are going to be cached.
- * They can be invalidated by using either {@link #invalidateAPICache()} for all or {@link #invalidateAPICache(SingleSignOnAccount)} for a specific {@link SingleSignOnAccount} and will be recreated when they are queried the next time.
+ * 仅为仍依赖 Retrofit/SSO 的模块（如云端分享、直接编辑）保留；主流程为纯本地，不再通过此处同步笔记。
  */
 @WorkerThread
 public class ApiProvider {
@@ -49,8 +46,8 @@ public class ApiProvider {
     private static final ApiProvider INSTANCE = new ApiProvider();
 
     private static final String API_ENDPOINT_OCS = "/ocs/v2.php/cloud/";
-    private static final String API_ENDPOINT_FILES ="/ocs/v2.php/apps/files/api/v1/";
-    private static final String API_ENDPOINT_FILES_SHARING ="/ocs/v2.php/apps/files_sharing/api/v1/";
+    private static final String API_ENDPOINT_FILES = "/ocs/v2.php/apps/files/api/v1/";
+    private static final String API_ENDPOINT_FILES_SHARING = "/ocs/v2.php/apps/files_sharing/api/v1/";
 
     private static final Map<String, NextcloudAPI> API_CACHE = new ConcurrentHashMap<>();
 
@@ -59,18 +56,13 @@ public class ApiProvider {
     private static final Map<String, FilesAPI> API_CACHE_FILES = new ConcurrentHashMap<>();
     private static final Map<String, ShareAPI> API_CACHE_FILES_SHARING = new ConcurrentHashMap<>();
 
-
     public static ApiProvider getInstance() {
         return INSTANCE;
     }
 
     private ApiProvider() {
-        // Singleton
     }
 
-    /**
-     * An {@link OcsAPI} currently shares the {@link Gson} configuration with the {@link NotesAPI} and therefore divides all {@link Calendar} milliseconds by 1000 while serializing and multiplies values by 1000 during deserialization.
-     */
     public synchronized OcsAPI getOcsAPI(@NonNull Context context, @NonNull SingleSignOnAccount ssoAccount) {
         if (API_CACHE_OCS.containsKey(ssoAccount.name)) {
             return API_CACHE_OCS.get(ssoAccount.name);
@@ -80,9 +72,6 @@ public class ApiProvider {
         return ocsAPI;
     }
 
-    /**
-     * In case the {@param preferredApiVersion} changes, call {@link #invalidateAPICache(SingleSignOnAccount)} or {@link #invalidateAPICache()} to make sure that this call returns a {@link NotesAPI} that uses the correct compatibility layer.
-     */
     public synchronized NotesAPI getNotesAPI(@NonNull Context context, @NonNull SingleSignOnAccount ssoAccount, @Nullable ApiVersion preferredApiVersion) {
         if (API_CACHE_NOTES.containsKey(ssoAccount.name)) {
             return API_CACHE_NOTES.get(ssoAccount.name);
@@ -113,33 +102,26 @@ public class ApiProvider {
     private synchronized NextcloudAPI getNextcloudAPI(@NonNull Context context, @NonNull SingleSignOnAccount ssoAccount) {
         if (API_CACHE.containsKey(ssoAccount.name)) {
             return API_CACHE.get(ssoAccount.name);
-        } else {
-            Log.v(TAG, "NextcloudRequest account: " + ssoAccount.name);
-            final var nextcloudAPI = new NextcloudAPI(context.getApplicationContext(), ssoAccount,
-                    new GsonBuilder()
-                            .setStrictness(Strictness.LENIENT)
-                            .excludeFieldsWithoutExposeAnnotation()
-                            .registerTypeHierarchyAdapter(Calendar.class, (JsonSerializer<Calendar>) (src, typeOfSrc, ctx) -> new JsonPrimitive(src.getTimeInMillis() / 1_000))
-                            .registerTypeHierarchyAdapter(Calendar.class, (JsonDeserializer<Calendar>) (src, typeOfSrc, ctx) -> {
-                                final var calendar = Calendar.getInstance();
-                                calendar.setTimeInMillis(src.getAsLong() * 1_000);
-                                return calendar;
-                            })
-                            .registerTypeAdapter(Capabilities.class, new CapabilitiesDeserializer())
-                            .create(), (e) -> {
-                invalidateAPICache(ssoAccount);
-                e.printStackTrace();
-            });
-            API_CACHE.put(ssoAccount.name, nextcloudAPI);
-            return nextcloudAPI;
         }
+        Log.v(TAG, "NextcloudRequest account: " + ssoAccount.name);
+        final var nextcloudAPI = new NextcloudAPI(context.getApplicationContext(), ssoAccount,
+                new GsonBuilder()
+                        .setStrictness(Strictness.LENIENT)
+                        .registerTypeHierarchyAdapter(Calendar.class, (JsonSerializer<Calendar>) (src, typeOfSrc, ctx) -> new JsonPrimitive(src.getTimeInMillis() / 1_000))
+                        .registerTypeHierarchyAdapter(Calendar.class, (JsonDeserializer<Calendar>) (src, typeOfSrc, ctx) -> {
+                            final var calendar = Calendar.getInstance();
+                            calendar.setTimeInMillis(src.getAsLong() * 1_000);
+                            return calendar;
+                        })
+                        .registerTypeAdapter(Capabilities.class, new CapabilitiesDeserializer())
+                        .create(), (e) -> {
+                    invalidateAPICache(ssoAccount);
+                    e.printStackTrace();
+                });
+        API_CACHE.put(ssoAccount.name, nextcloudAPI);
+        return nextcloudAPI;
     }
 
-    /**
-     * Invalidates the API cache for the given {@param ssoAccount}
-     *
-     * @param ssoAccount the ssoAccount for which the API cache should be cleared.
-     */
     public synchronized void invalidateAPICache(@NonNull SingleSignOnAccount ssoAccount) {
         Log.v(TAG, "Invalidating API cache for " + ssoAccount.name);
         if (API_CACHE.containsKey(ssoAccount.name)) {
@@ -151,23 +133,22 @@ public class ApiProvider {
         }
         API_CACHE_NOTES.remove(ssoAccount.name);
         API_CACHE_OCS.remove(ssoAccount.name);
+        API_CACHE_FILES.remove(ssoAccount.name);
+        API_CACHE_FILES_SHARING.remove(ssoAccount.name);
     }
 
-    /**
-     * Invalidates the whole API cache for all accounts
-     */
     public synchronized void invalidateAPICache() {
         for (final String key : API_CACHE.keySet()) {
             Log.v(TAG, "Invalidating API cache for " + key);
-            if (API_CACHE.containsKey(key)) {
-                final var nextcloudAPI = API_CACHE.get(key);
-                if (nextcloudAPI != null) {
-                    nextcloudAPI.close();
-                }
-                API_CACHE.remove(key);
+            final var nextcloudAPI = API_CACHE.get(key);
+            if (nextcloudAPI != null) {
+                nextcloudAPI.close();
             }
         }
+        API_CACHE.clear();
         API_CACHE_NOTES.clear();
         API_CACHE_OCS.clear();
+        API_CACHE_FILES.clear();
+        API_CACHE_FILES_SHARING.clear();
     }
 }

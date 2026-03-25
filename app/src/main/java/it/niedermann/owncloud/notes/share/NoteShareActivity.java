@@ -35,7 +35,6 @@ import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.google.android.material.snackbar.Snackbar;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
 import com.owncloud.android.lib.common.utils.Log_OC;
 import com.owncloud.android.lib.resources.shares.OCShare;
 import com.owncloud.android.lib.resources.shares.ShareType;
@@ -147,32 +146,17 @@ public class NoteShareActivity extends BrandedActivity implements ShareeListAdap
         }
 
         executorService.submit(() -> {
-            try {
-                final var ssoAcc = SingleAccountHelper.getCurrentSingleSignOnAccount(NoteShareActivity.this);
-                repository = new ShareRepository(NoteShareActivity.this, ssoAcc);
-                capabilities = repository.getCapabilities();
-                repository.getSharesForNotesAndSaveShareEntities();
-
+            if (account.getUrl() != null && account.getUrl().startsWith("file")) {
                 runOnUiThread(() -> {
-                    binding.searchContainer.setVisibility(View.VISIBLE);
-                    binding.sharesList.setVisibility(View.VISIBLE);
-                    binding.sharesList.setAdapter(new ShareeListAdapter(this, new ArrayList<>(), this, account));
-                    binding.sharesList.setLayoutManager(new LinearLayoutManager(this));
-                    binding.pickContactEmailBtn.setOnClickListener(v -> checkContactPermission());
-                    binding.btnShareButton.setOnClickListener(v -> ShareUtil.openShareDialog(this, note.getTitle(), note.getContent()));
-
-                    if (note.getReadonly()) {
-                        setupReadOnlySearchView();
-                    } else {
-                        setupSearchView((SearchManager) getSystemService(Context.SEARCH_SERVICE), getComponentName());
-                    }
-
-                    updateShareeListAdapter();
-                    binding.loadingLayout.setVisibility(View.GONE);
+                    ShareUtil.openShareDialog(NoteShareActivity.this, note.getTitle(), note.getContent());
+                    finish();
                 });
-            } catch (Exception e) {
-                Log_OC.e(TAG, "Exception at NoteShareActivity.init: " + e);
+                return;
             }
+            runOnUiThread(() -> {
+                Snackbar.make(binding.getRoot(), R.string.local_mode_no_cloud_account, Snackbar.LENGTH_LONG).show();
+                finish();
+            });
         });
     }
 

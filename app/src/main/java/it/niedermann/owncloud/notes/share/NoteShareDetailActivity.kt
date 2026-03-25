@@ -11,8 +11,8 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.View
+import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
-import com.nextcloud.android.sso.helper.SingleAccountHelper
 import com.owncloud.android.lib.common.utils.Log_OC
 import com.owncloud.android.lib.resources.shares.OCShare
 import com.owncloud.android.lib.resources.shares.SharePermissionsBuilder
@@ -105,20 +105,9 @@ class NoteShareDetailActivity : BrandedActivity(),
             isSecureShare = it.getBoolean(ARG_SECURE_SHARE, false)
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val ssoAcc =
-                SingleAccountHelper.getCurrentSingleSignOnAccount(this@NoteShareDetailActivity)
-            repository = ShareRepository(this@NoteShareDetailActivity, ssoAcc)
-            permission = repository.getCapabilities().defaultPermission
-
-            withContext(Dispatchers.Main) {
-                if (shareProcessStep == SCREEN_TYPE_PERMISSION) {
-                    showShareProcessFirst()
-                } else {
-                    showShareProcessSecond()
-                }
-                implementClickEvents()
-            }
+        lifecycleScope.launch(Dispatchers.Main) {
+            Toast.makeText(this@NoteShareDetailActivity, R.string.local_mode_no_cloud_account, Toast.LENGTH_LONG).show()
+            finish()
         }
     }
 

@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import it.niedermann.owncloud.notes.persistence.ApiProvider;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.shared.model.ApiVersion;
 
@@ -61,7 +60,6 @@ public class Migration_22_23 extends Migration {
             db.update("ACCOUNT", OnConflictStrategy.REPLACE, values, "ID = ?", new String[]{String.valueOf(cursor.getLong(COLUMN_POSITION_ID))});
         }
         cursor.close();
-        ApiProvider.getInstance().invalidateAPICache();
     }
 
     @Nullable

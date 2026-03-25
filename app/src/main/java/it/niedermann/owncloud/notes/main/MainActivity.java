@@ -17,16 +17,18 @@ import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.
 import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.FAVORITES;
 import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.RECENT;
 import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.UNCATEGORIZED;
-import static it.niedermann.owncloud.notes.shared.util.SSOUtil.askForNewAccount;
 
 import android.accounts.NetworkErrorException;
 import android.animation.AnimatorInflater;
 import android.app.SearchManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Toast;
 import android.view.View;
 
 import androidx.annotation.ColorInt;
@@ -43,6 +45,7 @@ import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.GravityCompat;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.selection.SelectionTracker;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -51,24 +54,15 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.RequestOptions;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.nextcloud.android.common.ui.theme.utils.ColorRole;
-import com.nextcloud.android.sso.AccountImporter;
-import com.nextcloud.android.sso.exceptions.AccountImportCancelledException;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
 import com.nextcloud.android.sso.exceptions.NextcloudHttpRequestFailedException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.exceptions.TokenMismatchException;
-import com.nextcloud.android.sso.exceptions.UnknownErrorException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
 
 import java.net.HttpURLConnection;
 import java.util.LinkedList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 
 import it.niedermann.android.util.ColorUtil;
 import it.niedermann.owncloud.notes.LockedActivity;
@@ -85,7 +79,6 @@ import it.niedermann.owncloud.notes.edit.EditNoteActivity;
 import it.niedermann.owncloud.notes.edit.category.CategoryDialogFragment;
 import it.niedermann.owncloud.notes.exception.ExceptionDialogFragment;
 import it.niedermann.owncloud.notes.exception.IntendedOfflineException;
-import it.niedermann.owncloud.notes.importaccount.ImportAccountActivity;
 import it.niedermann.owncloud.notes.main.items.ItemAdapter;
 import it.niedermann.owncloud.notes.main.items.grid.GridItemDecoration;
 import it.niedermann.owncloud.notes.main.items.list.NotesListViewItemTouchHelper;
@@ -95,9 +88,6 @@ import it.niedermann.owncloud.notes.main.menu.MenuAdapter;
 import it.niedermann.owncloud.notes.main.navigation.NavigationAdapter;
 import it.niedermann.owncloud.notes.main.navigation.NavigationClickListener;
 import it.niedermann.owncloud.notes.main.navigation.NavigationItem;
-import it.niedermann.owncloud.notes.persistence.ApiProvider;
-import it.niedermann.owncloud.notes.persistence.CapabilitiesClient;
-import it.niedermann.owncloud.notes.persistence.CapabilitiesWorker;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.persistence.entity.Note;
 import it.niedermann.owncloud.notes.shared.model.Capabilities;
@@ -166,7 +156,7 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
             localAccount.setId(1L);
             localAccount.setUrl("file://localhost");
             localAccount.setUserName("localuser");
-            localAccount.setAccountName("Local Account");
+            localAccount.setAccountName(LOCAL_USER_NAME);
             localAccount.setCapabilitiesETag(null);
             localAccount.setColor(256); // 使用默认颜色
         }
@@ -197,15 +187,66 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
             runOnUiThread(() -> mainViewModel.postCurrentAccount(localAccount));
         });
     }
+    // 在 MainActivity 中添加刷新方法
+
+    // 在 MainActivity 类中添加广播接收器
+    private BroadcastReceiver refreshReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            // 接收到刷新请求，执行刷新操作
+            refreshNotesList();
+        }
+    };
+    private void refreshNotesList() {
+        Log.d(TAG, "Refreshing notes list for local storage mode");
+
+        // 首先尝试获取当前账户
+        Account currentAccount = mainViewModel.getCurrentAccount().getValue();
+
+        // 如果当前账户为空，尝试获取本地账户
+        if (currentAccount == null) {
+            try {
+                currentAccount = mainViewModel.getLocalAccountByAccountName(LOCAL_USER_NAME);
+                if (currentAccount != null) {
+                    // 设置为当前账户
+                    mainViewModel.postCurrentAccount(currentAccount);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error getting local account", e);
+            }
+        }
+
+        // 如果仍然为空，使用我们自己维护的本地账户引用
+        if (currentAccount == null) {
+            currentAccount = localAccount;
+            if (currentAccount != null) {
+                mainViewModel.postCurrentAccount(currentAccount);
+            }
+        }
+
+        // 现在刷新笔记列表
+        if (currentAccount != null) {
+            // 对于本地模式，直接触发数据刷新
+            final var selectedCategory = mainViewModel.getSelectedCategory().getValue();
+            if (selectedCategory != null) {
+                // 通过重新发布搜索词来触发刷新
+                mainViewModel.postSearchTerm(mainViewModel.getSearchTerm().getValue());
+                Log.d(TAG, "Notes list refresh triggered");
+            }
+        } else {
+            Log.w(TAG, "No valid account found, cannot refresh notes list");
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen.installSplashScreen(this);
 
         super.onCreate(savedInstanceState);
+        // 注册广播接收器
+        LocalBroadcastManager.getInstance(this).registerReceiver(refreshReceiver, new IntentFilter("notes.refresh"));
 
         mainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
-        CapabilitiesWorker.update(this);
         binding = DrawerLayoutBinding.inflate(getLayoutInflater());
         activityBinding = ActivityNotesListViewBinding.bind(binding.activityNotesListView.getRoot());
 
@@ -232,7 +273,9 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
             } else {
                 executor.submit(() -> {
                     final var account = mainViewModel.getLocalAccountByAccountName(LOCAL_USER_NAME);
-                    runOnUiThread(() -> mainViewModel.postCurrentAccount(localAccount));
+                    if (account != null) {
+                        runOnUiThread(() -> mainViewModel.postCurrentAccount(account));
+                    }
                 });
             }
         });
@@ -382,69 +425,14 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
         });
     }
 
-    private void showAppAccountNotFoundAlertDialog(NextcloudFilesAppAccountNotFoundException e) {
-        final MaterialAlertDialogBuilder alertDialogBuilder = new MaterialAlertDialogBuilder(this)
-                .setTitle(NextcloudFilesAppAccountNotFoundException.class.getSimpleName())
-                .setMessage(R.string.backup)
-                .setPositiveButton(R.string.simple_backup, (a, b) -> executor.submit(() -> {
-                    final var modifiedNotes = new LinkedList<Note>();
-                    for (final var account : mainViewModel.getAccounts()) {
-                        modifiedNotes.addAll(mainViewModel.getLocalModifiedNotes(account.getId()));
-                    }
-                    if (modifiedNotes.size() == 1) {
-                        final var note = modifiedNotes.get(0);
-                        ShareUtil.openShareDialog(this, note.getTitle(), note.getContent());
-                    } else {
-                        ShareUtil.openShareDialog(this,
-                                getResources().getQuantityString(R.plurals.share_multiple, modifiedNotes.size(), modifiedNotes.size()),
-                                mainViewModel.collectNoteContents(modifiedNotes.stream().map(Note::getId).collect(Collectors.toList())));
-                    }
-                }))
-                .setNegativeButton(R.string.simple_error, (a, b) -> {
-                    final var ssoPreferences = AccountImporter.getSharedPreferences(getApplicationContext());
-                    final var ssoPreferencesString = new StringBuilder()
-                            .append("Current SSO account: ").append(ssoPreferences.getString("PREF_CURRENT_ACCOUNT_STRING", null)).append("\n")
-                            .append("\n")
-                            .append("SSO SharedPreferences: ").append("\n");
-                    for (final var entry : ssoPreferences.getAll().entrySet()) {
-                        ssoPreferencesString.append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
-                    }
-                    ssoPreferencesString.append("\n")
-                            .append("Available accounts in DB: ").append(TextUtils.join(", ", mainViewModel.getAccounts().stream().map(Account::getAccountName).collect(Collectors.toList())));
-                    runOnUiThread(() -> ExceptionDialogFragment.newInstance(new RuntimeException(e.getMessage(), new RuntimeException(ssoPreferencesString.toString(), e))).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName()));
-                });
-
-        NotesApplication.brandingUtil().dialog.colorMaterialAlertDialogBackground(this, alertDialogBuilder);
-
-        alertDialogBuilder.show();
+    // 在 onDestroy 中注销广播接收器
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(refreshReceiver);
     }
-
     @Override
     protected void onResume() {
-        final var accountLiveData = mainViewModel.getCurrentAccount();
-        accountLiveData.observe(this, (currentAccount) -> {
-            accountLiveData.removeObservers(this);
-            try {
-                // It is possible that after the deletion of the last account, this onResponse gets called before the ImportAccountActivity gets started.
-                if (SingleAccountHelper.getCurrentSingleSignOnAccount(this) != null) {
-                    mainViewModel.synchronizeNotes(this, currentAccount, new IResponseCallback<>() {
-                        @Override
-                        public void onSuccess(Void v) {
-                            Log.d(TAG, "Successfully synchronized notes for " + currentAccount.getAccountName());
-                        }
-
-                        @Override
-                        public void onError(@NonNull Throwable t) {
-                            t.printStackTrace();
-                        }
-                    });
-                }
-            } catch (NextcloudFilesAppAccountNotFoundException e) {
-                ExceptionDialogFragment.newInstance(e).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-            } catch (NoCurrentAccountSelectedException e) {
-                Log.i(TAG, "No current account is selected - maybe the last account has been deleted?");
-            }
-        });
         super.onResume();
     }
 
@@ -725,7 +713,6 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        AccountImporter.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
     }
 
     /**
@@ -752,75 +739,6 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                 }
             }
             default -> {
-                try {
-                    AccountImporter.onActivityResult(requestCode, resultCode, data, this, (ssoAccount) -> {
-                        CapabilitiesWorker.update(this);
-                        executor.submit(() -> {
-                            final var importSnackbar = BrandedSnackbar.make(coordinatorLayout, R.string.progress_import_indeterminate, Snackbar.LENGTH_INDEFINITE)
-                                    .setAnchorView(binding.activityNotesListView.fabCreate);
-                            Log.i(TAG, "Added account: " + "name:" + ssoAccount.name + ", " + ssoAccount.url + ", userId" + ssoAccount.userId);
-                            try {
-                                Log.i(TAG, "Refreshing capabilities for " + ssoAccount.name);
-                                final var capabilities = CapabilitiesClient.getCapabilities(getApplicationContext(), ssoAccount, null, ApiProvider.getInstance());
-                                final String displayName = CapabilitiesClient.getDisplayName(getApplicationContext(), ssoAccount, ApiProvider.getInstance());
-                                final var status$ = mainViewModel.addAccount(ssoAccount.url, ssoAccount.userId, ssoAccount.name, capabilities, displayName, new IResponseCallback<>() {
-                                    @Override
-                                    public void onSuccess(Account result) {
-                                        executor.submit(() -> {
-                                            runOnUiThread(() -> {
-                                                importSnackbar.setText(R.string.account_imported);
-                                                importSnackbar.setAction(R.string.simple_switch, (v) -> mainViewModel.postCurrentAccount(mainViewModel.getLocalAccountByAccountName(ssoAccount.name)));
-                                            });
-                                            Log.i(TAG, capabilities.toString());
-                                        });
-                                    }
-
-                                    @Override
-                                    public void onError(@NonNull Throwable t) {
-                                        runOnUiThread(() -> {
-                                            importSnackbar.dismiss();
-                                            ExceptionDialogFragment.newInstance(t).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-                                        });
-                                    }
-                                });
-                                runOnUiThread(() -> status$.observe(this, (status) -> {
-                                    importSnackbar.show();
-                                    Log.v(TAG, "Status: " + status.count + " of " + status.total);
-                                    if (status.count > 0) {
-                                        importSnackbar.setText(getString(R.string.progress_import, status.count + 1, status.total));
-                                    }
-                                }));
-                            } catch (Throwable e) {
-                                importSnackbar.dismiss();
-                                ApiProvider.getInstance().invalidateAPICache(ssoAccount);
-                                // Happens when importing an already existing account the second time
-                                if (e instanceof TokenMismatchException && mainViewModel.getLocalAccountByAccountName(ssoAccount.name) != null) {
-                                    Log.w(TAG, "Received " + TokenMismatchException.class.getSimpleName() + " and the given ssoAccount.name (" + ssoAccount.name + ") does already exist in the database. Assume that this account has already been imported.");
-                                    runOnUiThread(() -> {
-                                        mainViewModel.postCurrentAccount(mainViewModel.getLocalAccountByAccountName(ssoAccount.name));
-                                        // TODO there is already a sync in progress and results in displaying a TokenMissMatchException snackbar which conflicts with this one
-                                        coordinatorLayout.post(() -> BrandedSnackbar.make(coordinatorLayout, R.string.account_already_imported, Snackbar.LENGTH_LONG)
-                                                .setAnchorView(binding.activityNotesListView.fabCreate)
-                                                .show());
-                                    });
-                                } else if (e instanceof UnknownErrorException && e.getMessage() != null && e.getMessage().contains("No address associated with hostname")) {
-                                    // https://github.com/nextcloud/notes-android/issues/1014
-                                    runOnUiThread(() -> Snackbar.make(coordinatorLayout, R.string.you_have_to_be_connected_to_the_internet_in_order_to_add_an_account, Snackbar.LENGTH_LONG)
-                                            .setAnchorView(binding.activityNotesListView.fabCreate)
-                                            .show());
-                                } else {
-                                    e.printStackTrace();
-                                    runOnUiThread(() -> {
-                                        binding.activityNotesListView.progressCircular.setVisibility(GONE);
-                                        ExceptionDialogFragment.newInstance(e).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-                                    });
-                                }
-                            }
-                        });
-                    });
-                } catch (AccountImportCancelledException e) {
-                    Log.i(TAG, "AccountImport has been cancelled.");
-                }
             }
         }
         runOnUiThread(() -> {
@@ -878,7 +796,7 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
 
     @Override
     public void addAccount() {
-        askForNewAccount(this);
+        Toast.makeText(this, R.string.local_mode_no_cloud_account, Toast.LENGTH_LONG).show();
     }
 
     @Override

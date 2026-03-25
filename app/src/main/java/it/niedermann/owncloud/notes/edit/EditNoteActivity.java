@@ -26,12 +26,8 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.preference.PreferenceManager;
-
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-import com.nextcloud.android.sso.model.SingleSignOnAccount;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -402,6 +398,9 @@ public class EditNoteActivity extends LockedActivity implements BaseNoteFragment
             preferences.edit().putString(prefKeyLastMode, getString(R.string.pref_value_mode_direct_edit)).apply();
         }
         fragment.onCloseNote();
+// 发送广播通知 MainActivity 刷新
+        Intent broadcastIntent = new Intent("notes.refresh");
+        LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent);
 
         if(isTaskRoot()) {
             Intent intent = new Intent(EditNoteActivity.this, MainActivity.class);

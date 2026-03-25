@@ -25,14 +25,10 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-import com.nextcloud.android.sso.model.SingleSignOnAccount;
-
 import java.util.regex.Pattern;
 
 import it.niedermann.owncloud.notes.R;
+import it.niedermann.owncloud.notes.main.MainActivity;
 import it.niedermann.owncloud.notes.branding.BrandingUtil;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.shared.util.ExtendedFabUtil;
@@ -115,14 +111,8 @@ public abstract class SearchableBaseNoteFragment extends BaseNoteFragment {
     }
 
     private void checkDirectEditingAvailable() {
-        try {
-            final SingleSignOnAccount ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(requireContext());
-            final Account localAccount = repo.getAccountByName(ssoAccount.name);
-            directEditRemotelyAvailable = localAccount != null && localAccount.isDirectEditingAvailable();
-        } catch (NextcloudFilesAppAccountNotFoundException | NoCurrentAccountSelectedException e) {
-            Log.w(TAG, "checkDirectEditingAvailable: ", e);
-            directEditRemotelyAvailable = false;
-        }
+        final Account localAccount = repo.getAccountByName(MainActivity.LOCAL_USER_NAME);
+        directEditRemotelyAvailable = localAccount != null && localAccount.isDirectEditingAvailable();
     }
 
     protected boolean isDirectEditEnabled() {

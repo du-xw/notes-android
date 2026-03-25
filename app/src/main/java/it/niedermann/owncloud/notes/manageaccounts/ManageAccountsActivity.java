@@ -6,12 +6,7 @@
  */
 package it.niedermann.owncloud.notes.manageaccounts;
 
-import static it.niedermann.owncloud.notes.branding.BrandingUtil.readBrandMainColorLiveData;
-import static it.niedermann.owncloud.notes.shared.util.ApiVersionUtil.getPreferredApiVersion;
-
-import android.accounts.NetworkErrorException;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -20,9 +15,6 @@ import androidx.annotation.StringRes;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.nextcloud.android.sso.AccountImporter;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
@@ -33,16 +25,11 @@ import it.niedermann.owncloud.notes.R;
 import it.niedermann.owncloud.notes.branding.BrandingUtil;
 import it.niedermann.owncloud.notes.branding.DeleteAlertDialogBuilder;
 import it.niedermann.owncloud.notes.databinding.ActivityManageAccountsBinding;
-import it.niedermann.owncloud.notes.databinding.DialogEditSettingBinding;
 import it.niedermann.owncloud.notes.exception.ExceptionDialogFragment;
 import it.niedermann.owncloud.notes.persistence.NotesRepository;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.shared.model.IResponseCallback;
 import it.niedermann.owncloud.notes.shared.model.NotesSettings;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-
 public class ManageAccountsActivity extends LockedActivity implements IManageAccountsCallback {
 
     private ActivityManageAccountsBinding binding;
@@ -141,86 +128,9 @@ public class ManageAccountsActivity extends LockedActivity implements IManageAcc
         );
     }
 
+    @SuppressWarnings("unused")
     private void changeAccountSetting(@NonNull Account localAccount, @StringRes int title, @StringRes int message, @StringRes int successMessage, @NonNull Function<NotesSettings, String> propertyExtractor, @NonNull Function<String, NotesSettings> settingsFactory) {
-        final var repository = NotesRepository.getInstance(getApplicationContext());
-        final var binding = DialogEditSettingBinding.inflate(getLayoutInflater());
-        final var mainColor$ = readBrandMainColorLiveData(this);
-        mainColor$.observe(this, color -> {
-            mainColor$.removeObservers(this);
-            final var util = BrandingUtil.of(color, this);
-            util.material.colorTextInputLayout(binding.inputWrapper);
-            util.material.colorProgressBar(binding.progress);
-        });
-
-        binding.inputWrapper.setHint(title);
-
-        final MaterialAlertDialogBuilder alertDialogBuilder = new MaterialAlertDialogBuilder(this)
-                .setTitle(title)
-                .setMessage(message)
-                .setView(binding.getRoot())
-                .setNeutralButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.action_edit_save, (v, d) -> {
-                    final var property = binding.property.getText().toString();
-                    executor.execute(() -> {
-                        try {
-                            final var putSettingsCall = repository.putServerSettings(AccountImporter.getSingleSignOnAccount(this, localAccount.getAccountName()), settingsFactory.apply(property), getPreferredApiVersion(localAccount.getApiVersion()));
-                            putSettingsCall.enqueue(new Callback<>() {
-                                @Override
-                                public void onResponse(@NonNull Call<NotesSettings> call, @NonNull Response<NotesSettings> response) {
-                                    final var body = response.body();
-                                    if (response.isSuccessful() && body != null) {
-                                        runOnUiThread(() -> Toast.makeText(ManageAccountsActivity.this, getString(successMessage, propertyExtractor.apply(body)), Toast.LENGTH_LONG).show());
-                                    } else {
-                                        runOnUiThread(() -> Toast.makeText(ManageAccountsActivity.this, getString(R.string.http_status_code, response.code()), Toast.LENGTH_LONG).show());
-                                    }
-                                }
-
-                                @Override
-                                public void onFailure(@NonNull Call<NotesSettings> call, @NonNull Throwable t) {
-                                    runOnUiThread(() -> ExceptionDialogFragment.newInstance(t).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName()));
-                                }
-                            });
-                        } catch (NextcloudFilesAppAccountNotFoundException e) {
-                            ExceptionDialogFragment.newInstance(e).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-                        }
-                    });
-                });
-
-        NotesApplication.brandingUtil().dialog.colorMaterialAlertDialogBackground(this, alertDialogBuilder);
-
-        var dialog = alertDialogBuilder.create();
-        alertDialogBuilder.show();
-
-        try {
-            repository.getServerSettings(AccountImporter.getSingleSignOnAccount(this, localAccount.getAccountName()), getPreferredApiVersion(localAccount.getApiVersion()))
-                    .enqueue(new Callback<>() {
-                        @Override
-                        public void onResponse(@NonNull Call<NotesSettings> call, @NonNull Response<NotesSettings> response) {
-                            runOnUiThread(() -> {
-                                final var body = response.body();
-                                if (response.isSuccessful() && body != null) {
-                                    binding.getRoot().removeView(binding.progress);
-                                    binding.property.setText(propertyExtractor.apply(body));
-                                    binding.inputWrapper.setVisibility(View.VISIBLE);
-                                } else {
-                                    dialog.dismiss();
-                                    ExceptionDialogFragment.newInstance(new NetworkErrorException(getString(R.string.http_status_code, response.code()))).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-                                }
-                            });
-                        }
-
-                        @Override
-                        public void onFailure(@NonNull Call<NotesSettings> call, @NonNull Throwable t) {
-                            runOnUiThread(() -> {
-                                dialog.dismiss();
-                                ExceptionDialogFragment.newInstance(t).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-                            });
-                        }
-                    });
-        } catch (NextcloudFilesAppAccountNotFoundException e) {
-            dialog.dismiss();
-            ExceptionDialogFragment.newInstance(e).show(getSupportFragmentManager(), ExceptionDialogFragment.class.getSimpleName());
-        }
+        Toast.makeText(this, R.string.local_mode_no_cloud_account, Toast.LENGTH_LONG).show();
     }
 
     @Override

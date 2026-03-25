@@ -8,51 +8,26 @@ package it.niedermann.owncloud.notes.shared.util;
 
 import android.app.Activity;
 import android.content.Context;
-import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 
-import com.nextcloud.android.sso.AccountImporter;
-import com.nextcloud.android.sso.exceptions.AndroidGetAccountsPermissionNotGranted;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppNotInstalledException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-import com.nextcloud.android.sso.ui.UiExceptionManager;
+import it.niedermann.owncloud.notes.R;
 
+/**
+ * 纯本地构建：不再通过 Nextcloud Files 应用导入账户。
+ */
 public class SSOUtil {
-
-    private static final String TAG = SSOUtil.class.getSimpleName();
 
     private SSOUtil() {
         throw new UnsupportedOperationException("Do not instantiate this util class.");
     }
 
-    /**
-     * Opens a dialog which allows the user to pick a Nextcloud account (which previously has to be configured in the files app).
-     * Also allows to configure a new Nextcloud account in the files app and directly import it.
-     *
-     * @param activity should implement AccountImporter.onActivityResult
-     */
     public static void askForNewAccount(@NonNull Activity activity) {
-        try {
-            AccountImporter.pickNewAccount(activity);
-        } catch (NextcloudFilesAppNotInstalledException e1) {
-            UiExceptionManager.showDialogForException(activity, e1);
-            Log.w(TAG, "=============================================================");
-            Log.w(TAG, "Nextcloud app is not installed. Cannot choose account");
-            e1.printStackTrace();
-        } catch (AndroidGetAccountsPermissionNotGranted e2) {
-            AccountImporter.requestAndroidAccountPermissionsAndPickAccount(activity);
-        }
+        Toast.makeText(activity, R.string.local_mode_no_cloud_account, Toast.LENGTH_LONG).show();
     }
 
-    public static boolean isConfigured(Context context) {
-        try {
-            SingleAccountHelper.getCurrentSingleSignOnAccount(context);
-            return true;
-        } catch (NextcloudFilesAppAccountNotFoundException | NoCurrentAccountSelectedException e) {
-            return false;
-        }
+    public static boolean isConfigured(@SuppressWarnings("unused") Context context) {
+        return true;
     }
 }

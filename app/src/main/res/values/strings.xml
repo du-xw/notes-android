@@ -33,6 +33,7 @@
     <string name="menu_preview">Preview</string>
     <string name="menu_share">Share</string>
     <string name="common_loading">Loading…</string>
+    <string name="local_mode_no_cloud_account">This build stores notes on device only. Adding a Nextcloud account is disabled.</string>
 
 
     <string name="search_in_category">Search in %1$s</string>

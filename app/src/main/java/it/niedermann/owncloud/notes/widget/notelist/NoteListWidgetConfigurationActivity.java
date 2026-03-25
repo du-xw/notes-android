@@ -16,9 +16,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
+import it.niedermann.owncloud.notes.main.MainActivity;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -133,14 +131,14 @@ public class NoteListWidgetConfigurationActivity extends LockedActivity {
         binding.recyclerView.setAdapter(adapterCategories);
 
         executor.submit(() -> {
-            try {
-                this.localAccount = repo.getAccountByName(SingleAccountHelper.getCurrentSingleSignOnAccount(this).name);
-            } catch (NextcloudFilesAppAccountNotFoundException | NoCurrentAccountSelectedException e) {
-                e.printStackTrace();
-                Toast.makeText(this, R.string.widget_not_logged_in, Toast.LENGTH_LONG).show();
-                // TODO Present user with app login screen
-                Log.w(TAG, "onCreate: user not logged in");
-                finish();
+            this.localAccount = repo.getAccountByName(MainActivity.LOCAL_USER_NAME);
+            if (this.localAccount == null) {
+                runOnUiThread(() -> {
+                    Toast.makeText(this, R.string.widget_not_logged_in, Toast.LENGTH_LONG).show();
+                    Log.w(TAG, "onCreate: no local account");
+                    finish();
+                });
+                return;
             }
             runOnUiThread(() -> viewModel.getAdapterCategories(localAccount.getId()).observe(this, (navigationItems) -> adapterCategories.setItems(navigationItems)));
         });

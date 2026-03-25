@@ -47,6 +47,11 @@ public class ManageAccountViewHolder extends RecyclerView.ViewHolder {
             final var popup = new PopupMenu(itemView.getContext(), v);
             popup.inflate(R.menu.menu_account);
 
+            if ("file".equals(Uri.parse(localAccount.getUrl()).getScheme())) {
+                popup.getMenu().removeItem(R.id.notes_path);
+                popup.getMenu().removeItem(R.id.file_suffix);
+            }
+
             final var preferredApiVersion = getPreferredApiVersion(localAccount.getApiVersion());
 
             if (preferredApiVersion == null || !preferredApiVersion.supportsFileSuffixChange()) {

@@ -112,8 +112,9 @@ dependencies {
         exclude group: 'org.ogce', module: 'xpp3'
     }
 
-    // Nextcloud SSO
-    implementation 'com.github.nextcloud.android-common:ui:1b779645b4ee2095ab133a8c939056eb13331453'
+    // Nextcloud SSO（android-common 使用 JitPack 发布版本号，commit hash 易在 JitPack 上失效导致 Could not find）
+    implementation "com.github.nextcloud.android-common:ui:$nextcloudAndroidCommonLib"
+    implementation "com.github.nextcloud.android-common:core:$nextcloudAndroidCommonLib"
     implementation 'com.github.nextcloud:Android-SingleSignOn:1.3.2'
 	implementation "com.github.stefan-niedermann.android-commons:shared-preferences:$androidCommonsVersion"
 	implementation "com.github.stefan-niedermann.android-commons:reactive-livedata:$androidCommonsVersion"
@@ -161,6 +162,14 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.18.0'
     testImplementation 'org.robolectric:robolectric:4.15.1'
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == "com.github.nextcloud.android-common") {
+            details.useVersion(nextcloudAndroidCommonLib)
+        }
+    }
 }
 
 // Run the compiler as a separate process

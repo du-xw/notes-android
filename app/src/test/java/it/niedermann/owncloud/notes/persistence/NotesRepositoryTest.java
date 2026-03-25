@@ -18,7 +18,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -37,7 +36,6 @@ import androidx.room.Room;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import com.nextcloud.android.sso.api.ParsedResponse;
 import com.nextcloud.android.sso.model.SingleSignOnAccount;
 
 import org.junit.After;
@@ -58,10 +56,8 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 
-import io.reactivex.Observable;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.persistence.entity.Note;
-import it.niedermann.owncloud.notes.persistence.sync.NotesAPI;
 import it.niedermann.owncloud.notes.shared.model.Capabilities;
 import it.niedermann.owncloud.notes.shared.model.IResponseCallback;
 
@@ -84,16 +80,10 @@ public class NotesRepositoryTest {
                 .allowMainThreadQueries()
                 .build();
 
-        final var constructor = NotesRepository.class.getDeclaredConstructor(Context.class, NotesDatabase.class, ExecutorService.class, ExecutorService.class, ExecutorService.class, ApiProvider.class);
+        final var constructor = NotesRepository.class.getDeclaredConstructor(Context.class, NotesDatabase.class, ExecutorService.class, ExecutorService.class, ExecutorService.class);
         constructor.setAccessible(true);
         final var executor = MoreExecutors.newDirectExecutorService();
-        final var apiProviderSpy = mock(ApiProvider.class);
-        final var notesApiSpy = mock(NotesAPI.class);
-        repo = constructor.newInstance(context, db, executor, executor, executor, apiProviderSpy);
-
-        doReturn(notesApiSpy).when(apiProviderSpy).getNotesAPI(any(), any(), any());
-        when(notesApiSpy.getNotesIDs()).thenReturn(Observable.just(Collections.emptyList()));
-        when(notesApiSpy.getNote(anyLong())).thenReturn(Observable.just(ParsedResponse.of(new Note())));
+        repo = constructor.newInstance(context, db, executor, executor, executor);
 
         NotesTestingUtil.mockSingleSignOn(new SingleSignOnAccount("彼得@äöüß.example.com", "彼得", "1337", "https://äöüß.example.com", ""));
         repo.addAccount("https://äöüß.example.com", "彼得", "彼得@äöüß.example.com", new Capabilities(), null, new IResponseCallback<>() {

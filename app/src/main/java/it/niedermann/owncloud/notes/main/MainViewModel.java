@@ -9,7 +9,6 @@ package it.niedermann.owncloud.notes.main;
 import static androidx.lifecycle.Transformations.distinctUntilChanged;
 import static androidx.lifecycle.Transformations.map;
 import static androidx.lifecycle.Transformations.switchMap;
-import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
 import static it.niedermann.owncloud.notes.main.MainActivity.ADAPTER_KEY_RECENT;
 import static it.niedermann.owncloud.notes.main.MainActivity.ADAPTER_KEY_STARRED;
 import static it.niedermann.owncloud.notes.main.slots.SlotterUtil.fillListByCategory;
@@ -23,7 +22,6 @@ import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.
 import static it.niedermann.owncloud.notes.shared.model.ENavigationCategoryType.UNCATEGORIZED;
 import static it.niedermann.owncloud.notes.shared.util.DisplayUtils.convertToCategoryNavigationItem;
 
-import android.accounts.NetworkErrorException;
 import android.app.Application;
 import android.content.Context;
 import android.text.TextUtils;
@@ -39,12 +37,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.SavedStateHandle;
 
-import com.nextcloud.android.sso.AccountImporter;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NextcloudHttpRequestFailedException;
 import com.nextcloud.android.sso.exceptions.UnknownErrorException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-import com.owncloud.android.lib.common.utils.Log_OC;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -58,11 +51,8 @@ import java.util.stream.Collectors;
 import it.niedermann.owncloud.notes.BuildConfig;
 import it.niedermann.owncloud.notes.R;
 import it.niedermann.owncloud.notes.branding.BrandingUtil;
-import it.niedermann.owncloud.notes.exception.IntendedOfflineException;
 import it.niedermann.owncloud.notes.main.navigation.NavigationAdapter;
 import it.niedermann.owncloud.notes.main.navigation.NavigationItem;
-import it.niedermann.owncloud.notes.persistence.ApiProvider;
-import it.niedermann.owncloud.notes.persistence.CapabilitiesClient;
 import it.niedermann.owncloud.notes.persistence.NotesRepository;
 import it.niedermann.owncloud.notes.persistence.entity.Account;
 import it.niedermann.owncloud.notes.persistence.entity.CategoryWithNotesCount;
@@ -398,75 +388,19 @@ public class MainViewModel extends AndroidViewModel {
     /**
      * Updates the network status if necessary and pulls the latest {@link Capabilities} of the given {@param localAccount}
      */
+    /** 纯本地模式：不向服务器拉取 Capabilities。 */
     public void synchronizeCapabilities(@NonNull Account localAccount, @NonNull IResponseCallback<Void> callback) {
-        executor.submit(() -> {
-            Log.v("duxiwei", "repo.isSyncPossible()="+repo.isSyncPossible());
-            if (!repo.isSyncPossible()) {
-                repo.updateNetworkStatus();
-            }
-            if (repo.isSyncPossible()) {
-                try {
-                    final var ssoAccount = AccountImporter.getSingleSignOnAccount(getApplication(), localAccount.getAccountName());
-                    try {
-                        final var capabilities = CapabilitiesClient.getCapabilities(getApplication(), ssoAccount, localAccount.getCapabilitiesETag(), ApiProvider.getInstance());
-                        repo.updateCapabilitiesETag(localAccount.getId(), capabilities.getETag());
-                        repo.updateBrand(localAccount.getId(), capabilities.getColor());
-                        localAccount.setColor(capabilities.getColor());
-                        BrandingUtil.saveBrandColor(getApplication(), localAccount.getColor());
-                        repo.updateApiVersion(localAccount.getId(), capabilities.getApiVersion());
-                        repo.updateDirectEditingAvailable(localAccount.getId(), capabilities.isDirectEditingAvailable());
-                        callback.onSuccess(null);
-                    } catch (Throwable t) {
-                        if (t.getClass() == NextcloudHttpRequestFailedException.class || t instanceof NextcloudHttpRequestFailedException) {
-                            if (((NextcloudHttpRequestFailedException) t).getStatusCode() == HTTP_NOT_MODIFIED) {
-                                Log.d(TAG, "Server returned HTTP Status Code " + ((NextcloudHttpRequestFailedException) t).getStatusCode() + " - Capabilities not modified.");
-                                callback.onSuccess(null);
-                                return;
-                            }
-                        }
-                        callback.onError(t);
-                    }
-                } catch (NextcloudFilesAppAccountNotFoundException e) {
-                    repo.deleteAccount(localAccount);
-                    callback.onError(e);
-                }
-            } else {
-                if (repo.isNetworkConnected() && repo.isSyncOnlyOnWifi()) {
-                    callback.onError(new IntendedOfflineException("Network is connected, but sync is not possible."));
-                } else {
-                    callback.onError(new NetworkErrorException("Sync is not possible, because network is not connected."));
-                }
-            }
-        }, "SYNC_CAPABILITIES");
+        executor.submit(() -> callback.onSuccess(null), "SYNC_CAPABILITIES");
     }
 
     /**
      * Updates the network status if necessary and pulls the latest notes of the given {@param localAccount}
      */
+    /** 纯本地模式：不执行与服务器的笔记同步。 */
     public void synchronizeNotes(Context context, @NonNull Account currentAccount, @NonNull IResponseCallback<Void> callback) {
         executor.submit(() -> {
-            Log.v(TAG, "[synchronize] - currentAccount: " + currentAccount.getAccountName());
-            if (!repo.isSyncPossible()) {
-                repo.updateNetworkStatus();
-            }
-            if (repo.isSyncPossible()) {
-//                repo.scheduleSync(currentAccount, false);
-
-//                try {
-//                    final var ssoAccount = AccountImporter.getSingleSignOnAccount(context, currentAccount.getAccountName());
-////                    CapabilitiesClient.getCapabilities(context, null, null, ApiProvider.getInstance());
-//                } catch (Throwable t) {
-//                    Log_OC.e(TAG, t.getMessage());
-//                }
-
-                callback.onSuccess(null);
-            } else { // Sync is not possible
-                if (repo.isNetworkConnected() && repo.isSyncOnlyOnWifi()) {
-                    callback.onError(new IntendedOfflineException("Network is connected, but sync is not possible."));
-                } else {
-                    callback.onError(new NetworkErrorException("Sync is not possible, because network is not connected."));
-                }
-            }
+            Log.v(TAG, "[synchronize] local-only, skip remote: " + currentAccount.getAccountName());
+            callback.onSuccess(null);
         }, "SYNC_NOTES");
     }
 

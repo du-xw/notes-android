@@ -30,9 +30,6 @@ import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
 
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -109,7 +106,6 @@ public abstract class BaseNoteFragment extends BrandedFragment implements Catego
                         if (accountId > 0) {
                             /* Switch account if account id has been provided */
                             this.localAccount = repo.getAccountById(accountId);
-                            SingleAccountHelper.commitCurrentAccount(requireContext().getApplicationContext(), localAccount.getAccountName());
                         }
                         isNew = false;
                         note = originalNote = repo.getNoteById(id);

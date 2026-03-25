@@ -12,7 +12,6 @@ import static androidx.lifecycle.Transformations.distinctUntilChanged;
 import static androidx.lifecycle.Transformations.map;
 import static java.util.stream.Collectors.toMap;
 import static it.niedermann.owncloud.notes.edit.EditNoteActivity.ACTION_SHORTCUT;
-import static it.niedermann.owncloud.notes.shared.util.ApiVersionUtil.getPreferredApiVersion;
 import static it.niedermann.owncloud.notes.shared.util.NoteUtil.generateNoteExcerpt;
 import static it.niedermann.owncloud.notes.widget.notelist.NoteListWidget.updateNoteListWidgets;
 import static it.niedermann.owncloud.notes.widget.singlenote.SingleNoteWidget.updateSingleNoteWidgets;
@@ -43,12 +42,6 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Observer;
 import androidx.preference.PreferenceManager;
 
-import com.nextcloud.android.sso.AccountImporter;
-import com.nextcloud.android.sso.exceptions.NextcloudFilesAppAccountNotFoundException;
-import com.nextcloud.android.sso.exceptions.NoCurrentAccountSelectedException;
-import com.nextcloud.android.sso.helper.SingleAccountHelper;
-import com.nextcloud.android.sso.model.SingleSignOnAccount;
-import com.owncloud.android.lib.common.utils.Log_OC;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -81,12 +74,13 @@ import it.niedermann.owncloud.notes.shared.model.ISyncCallback;
 import it.niedermann.owncloud.notes.shared.model.ImportStatus;
 import it.niedermann.owncloud.notes.shared.model.NavigationCategory;
 import it.niedermann.owncloud.notes.shared.model.NotesSettings;
-import it.niedermann.owncloud.notes.shared.model.SyncResultStatus;
+
+import com.nextcloud.android.sso.model.SingleSignOnAccount;
+
+import retrofit2.Call;
 import it.niedermann.owncloud.notes.shared.util.ApiVersionUtil;
 import it.niedermann.owncloud.notes.shared.util.ConnectionLiveData;
 import it.niedermann.owncloud.notes.shared.util.NoteUtil;
-import it.niedermann.owncloud.notes.shared.util.SSOUtil;
-import retrofit2.Call;
 
 @SuppressWarnings("UnusedReturnValue")
 public class NotesRepository {
@@ -95,7 +89,6 @@ public class NotesRepository {
 
     private static NotesRepository instance;
 
-    private final ApiProvider apiProvider;
     private ExecutorService executor;
     private final ExecutorService syncExecutor;
     private final ExecutorService importExecutor;
@@ -118,16 +111,6 @@ public class NotesRepository {
             return;
         }
 
-        if (isSyncPossible() && SSOUtil.isConfigured(context)) {
-            executor.submit(() -> {
-                try {
-                    scheduleSync(getAccountByName(SingleAccountHelper.getCurrentSingleSignOnAccount(context).name), false);
-                } catch (NextcloudFilesAppAccountNotFoundException |
-                         NoCurrentAccountSelectedException e) {
-                    Log.v(TAG, "Can not select current SingleSignOn account after network changed, do not sync.");
-                }
-            });
-        }
     };
 
     /**
@@ -141,10 +124,6 @@ public class NotesRepository {
         }
     };
 
-    // current state of the synchronization
-    private final Map<Long, Boolean> syncActive = new ConcurrentHashMap<>();
-    private final Map<Long, Boolean> syncScheduled = new ConcurrentHashMap<>();
-
     // list of callbacks for both parts of synchronization
     private final Map<Long, List<ISyncCallback>> callbacksPush = new ConcurrentHashMap<>();
     private final Map<Long, List<ISyncCallback>> callbacksPull = new ConcurrentHashMap<>();
@@ -152,18 +131,17 @@ public class NotesRepository {
 
     public static synchronized NotesRepository getInstance(@NonNull Context context) {
         if (instance == null) {
-            instance = new NotesRepository(context, NotesDatabase.getInstance(context.getApplicationContext()), Executors.newCachedThreadPool(), Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), ApiProvider.getInstance());
+            instance = new NotesRepository(context, NotesDatabase.getInstance(context.getApplicationContext()), Executors.newCachedThreadPool(), Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
         }
         return instance;
     }
 
-    private NotesRepository(@NonNull final Context context, @NonNull final NotesDatabase db, @NonNull final ExecutorService executor, @NonNull final ExecutorService syncExecutor, @NonNull final ExecutorService importExecutor, @NonNull ApiProvider apiProvider) {
+    private NotesRepository(@NonNull final Context context, @NonNull final NotesDatabase db, @NonNull final ExecutorService executor, @NonNull final ExecutorService syncExecutor, @NonNull final ExecutorService importExecutor) {
         this.context = context.getApplicationContext();
         this.db = db;
         this.executor = executor;
         this.syncExecutor = syncExecutor;
         this.importExecutor = importExecutor;
-        this.apiProvider = apiProvider;
         this.defaultNonEmptyTitle = NoteUtil.generateNonEmptyNoteTitle("", this.context);
         this.syncOnlyOnWifiKey = context.getApplicationContext().getResources().getString(R.string.pref_key_wifi_only);
         this.connectionLiveData = new ConnectionLiveData(context);
@@ -239,8 +217,9 @@ public class NotesRepository {
 
         final var account = db.getAccountDao().getAccountById(db.getAccountDao().insert(new Account(url, username, accountName, displayName, capabilities)));
         if (account == null) {
-            callback.onError(new Exception("Could not read created account."));
+            mainHandler.post(() -> callback.onError(new Exception("Could not read created account.")));
         } else {
+            mainHandler.post(() -> callback.onSuccess(account));
 //            if (isSyncPossible()) {
 //                syncActive.put(account.getId(), true);
 //                try {
@@ -287,13 +266,6 @@ public class NotesRepository {
 
     @WorkerThread
     public void deleteAccount(@NonNull Account account) {
-        try {
-            apiProvider.invalidateAPICache(AccountImporter.getSingleSignOnAccount(context, account.getAccountName()));
-        } catch (NextcloudFilesAppAccountNotFoundException e) {
-            e.printStackTrace();
-            apiProvider.invalidateAPICache();
-        }
-
         db.getAccountDao().deleteAccount(account);
     }
 
@@ -498,7 +470,6 @@ public class NotesRepository {
         executor.submit(() -> ret.postValue(addNote(account.getId(), entity)));
         return map(ret, newNote -> {
             notifyWidgets();
-            scheduleSync(account, true);
             return newNote;
         });
     }
@@ -543,21 +514,8 @@ public class NotesRepository {
     @AnyThread
     public void toggleFavoriteAndSync(Account account, Note note) {
         executor.submit(() -> {
-            try {
-                final var ssoAccount = AccountImporter.getSingleSignOnAccount(context, account.getAccountName());
-                final var notesAPI = apiProvider.getNotesAPI(context, ssoAccount, getPreferredApiVersion(account.getApiVersion()));
-                note.setFavorite(!note.getFavorite());
-                final var result = notesAPI.updateNote(note);
-                final var response = result.execute();
-                if (response.isSuccessful()) {
-                    final var updatedNote = response.body();
-                    if (updatedNote != null) {
-                        scheduleSync(account, false);
-                    }
-                }
-            } catch (Exception e) {
-                Log_OC.e(TAG, "toggleFavoriteAndSync: " + e);
-            }
+            db.getNoteDao().toggleFavorite(note.getId());
+            notifyWidgets();
         });
     }
 
@@ -575,7 +533,7 @@ public class NotesRepository {
         executor.submit(() -> {
             db.getNoteDao().updateStatus(noteId, DBStatus.LOCAL_EDITED);
             db.getNoteDao().updateCategory(noteId, category);
-            scheduleSync(account, true);
+            notifyWidgets();
         });
     }
 
@@ -617,13 +575,12 @@ public class NotesRepository {
         if (rows > 0) {
             notifyWidgets();
             if (callback != null) {
-                addCallbackPush(localAccount, callback);
+                mainHandler.post(callback::onFinish);
             }
-            scheduleSync(localAccount, true);
             return newNote;
         } else {
             if (callback != null) {
-                callback.onFinish();
+                mainHandler.post(callback::onFinish);
             }
             return oldNote;
         }
@@ -640,7 +597,6 @@ public class NotesRepository {
         executor.submit(() -> {
             db.getNoteDao().updateStatus(id, DBStatus.LOCAL_DELETED);
             notifyWidgets();
-            scheduleSync(account, true);
 
             if (SDK_INT >= O) {
                 final var shortcutManager = context.getSystemService(ShortcutManager.class);
@@ -713,9 +669,8 @@ public class NotesRepository {
             final int updatedRows = db.getAccountDao().updateApiVersion(accountId, ApiVersionUtil.serialize(apiVersions));
             if (updatedRows == 0) {
                 Log.d(TAG, "ApiVersion not updated, because it did not change");
-            } else if (updatedRows == 1) {
+            } else             if (updatedRows == 1) {
                 Log.i(TAG, "Updated apiVersion to \"" + raw + "\" for accountId = " + accountId);
-                apiProvider.invalidateAPICache();
             } else {
                 Log.w(TAG, "Updated " + updatedRows + " but expected only 1 for accountId = " + accountId + " and apiVersion = \"" + raw + "\"");
             }
@@ -847,7 +802,7 @@ public class NotesRepository {
      */
     private void addCallbackPush(Account account, ISyncCallback callback) {
         if (account == null) {
-            Log.i(TAG, "ssoAccount is null. Is this a local account?");
+            Log.i(TAG, "account is null, completing callback immediately");
             callback.onScheduled();
             callback.onFinish();
         } else {
@@ -868,7 +823,7 @@ public class NotesRepository {
      */
     public void addCallbackPull(Account account, ISyncCallback callback) {
         if (account == null) {
-            Log.i(TAG, "ssoAccount is null. Is this a local account?");
+            Log.i(TAG, "account is null, completing callback immediately");
             callback.onScheduled();
             callback.onFinish();
         } else {
@@ -885,90 +840,35 @@ public class NotesRepository {
      *
      * @param onlyLocalChanges Whether to only push local changes to the server or to also load the whole list of notes from the server.
      */
+    /**
+     * 纯本地模式：不执行服务器同步，仅立即完成已注册的同步回调（供 {@link SyncWorker}、界面刷新等兼容调用）。
+     */
     public synchronized void scheduleSync(@Nullable Account account, boolean onlyLocalChanges) {
-         if (account == null) {
-            Log.i(TAG, SingleSignOnAccount.class.getSimpleName() + " is null. Is this a local account?");
-        } else {
-            syncActive.putIfAbsent(account.getId(), false);
-            Log.d(TAG, "Sync requested (" + (onlyLocalChanges ? "onlyLocalChanges" : "full") + "; " + (Boolean.TRUE.equals(syncActive.get(account.getId())) ? "sync active" : "sync NOT active") + ") ...");
-            if (isSyncPossible() && (!Boolean.TRUE.equals(syncActive.get(account.getId())) || onlyLocalChanges)) {
-                syncActive.put(account.getId(), true);
-                try {
-                    Log.d(TAG, "... starting now");
-                    final NotesServerSyncTask syncTask = new NotesServerSyncTask(context, this, account, onlyLocalChanges, apiProvider) {
-                        @Override
-                        void onPreExecute() {
-                            syncStatus.postValue(true);
-                            if (!syncScheduled.containsKey(localAccount.getId()) || syncScheduled.get(localAccount.getId()) == null) {
-                                syncScheduled.put(localAccount.getId(), false);
-                            }
-                            if (!onlyLocalChanges && Boolean.TRUE.equals(syncScheduled.get(localAccount.getId()))) {
-                                syncScheduled.put(localAccount.getId(), false);
-                            }
-                        }
-
-                        @Override
-                        void onPostExecute(SyncResultStatus status) {
-                            for (Throwable e : exceptions) {
-                                Log.e(TAG, e.getMessage(), e);
-                            }
-                            if (!status.pullSuccessful || !status.pushSuccessful) {
-                                syncErrors.postValue(exceptions);
-                            }
-                            syncActive.put(localAccount.getId(), false);
-                            // notify callbacks
-                            if (callbacks.containsKey(localAccount.getId()) && callbacks.get(localAccount.getId()) != null) {
-                                for (ISyncCallback callback : Objects.requireNonNull(callbacks.get(localAccount.getId()))) {
-                                    callback.onFinish();
-                                }
-                            }
-                            notifyWidgets();
-                            updateDynamicShortcuts(localAccount.getId());
-                            // start next sync if scheduled meanwhile
-                            if (syncScheduled.containsKey(localAccount.getId()) && syncScheduled.get(localAccount.getId()) != null && Boolean.TRUE.equals(syncScheduled.get(localAccount.getId()))) {
-                                scheduleSync(localAccount, false);
-                            }
-                            syncStatus.postValue(false);
-                        }
-                    };
-                    syncTask.addCallbacks(account, callbacksPush.get(account.getId()));
-                    callbacksPush.put(account.getId(), new ArrayList<>());
-                    if (!onlyLocalChanges) {
-                        syncTask.addCallbacks(account, callbacksPull.get(account.getId()));
-                        callbacksPull.put(account.getId(), new ArrayList<>());
-                    }
-                    syncExecutor.submit(syncTask);
-                } catch (NextcloudFilesAppAccountNotFoundException e) {
-                    Log.e(TAG, "... Could not find " + SingleSignOnAccount.class.getSimpleName() + " for account name " + account.getAccountName());
-                    e.printStackTrace();
-                }
-            } else if (!onlyLocalChanges) {
-                Log.d(TAG, "... scheduled");
-                syncScheduled.put(account.getId(), true);
-                if (callbacksPush.containsKey(account.getId()) && callbacksPush.get(account.getId()) != null) {
-                    final var callbacks = callbacksPush.get(account.getId());
-                    if (callbacks != null) {
-                        for (final var callback : callbacks) {
-                            callback.onScheduled();
-                        }
-                    } else {
-                        Log.w(TAG, "List of push-callbacks was set for account \"" + account.getAccountName() + "\" but it was null");
-                    }
-                }
-            } else {
-                Log.d(TAG, "... do nothing");
-                if (callbacksPush.containsKey(account.getId()) && callbacksPush.get(account.getId()) != null) {
-                    final var callbacks = callbacksPush.get(account.getId());
-                    if (callbacks != null) {
-                        for (final var callback : callbacks) {
-                            callback.onScheduled();
-                        }
-                    } else {
-                        Log.w(TAG, "List of push-callbacks was set for account \"" + account.getAccountName() + "\" but it was null");
-                    }
+        if (account == null) {
+            Log.v(TAG, "scheduleSync: account is null, skip");
+            return;
+        }
+        final List<ISyncCallback> pushList = callbacksPush.get(account.getId());
+        callbacksPush.put(account.getId(), new ArrayList<>());
+        if (pushList != null) {
+            for (ISyncCallback callback : pushList) {
+                callback.onScheduled();
+                callback.onFinish();
+            }
+        }
+        if (!onlyLocalChanges) {
+            final List<ISyncCallback> pullList = callbacksPull.get(account.getId());
+            callbacksPull.put(account.getId(), new ArrayList<>());
+            if (pullList != null) {
+                for (ISyncCallback callback : pullList) {
+                    callback.onScheduled();
+                    callback.onFinish();
                 }
             }
         }
+        notifyWidgets();
+        updateDynamicShortcuts(account.getId());
+        syncStatus.postValue(false);
     }
 
     @NonNull
@@ -981,6 +881,9 @@ public class NotesRepository {
         return this.syncErrors;
     }
 
+    /**
+     * 仅用于仍依赖 Nextcloud API 的界面（如账户设置、分享）；纯本地主流程不会调用。
+     */
     public Call<NotesSettings> getServerSettings(@NonNull SingleSignOnAccount ssoAccount, @Nullable ApiVersion preferredApiVersion) {
         return ApiProvider.getInstance().getNotesAPI(context, ssoAccount, preferredApiVersion).getSettings();
     }
