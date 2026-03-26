@@ -520,6 +520,9 @@ public class MainActivity extends LockedActivity implements NoteClickListener, A
                     @Override
                     public void onSuccess(Void v) {
                         Log.d(TAG, "Successfully synchronized capabilities and notes for " + currentAccount.getAccountName());
+                        runOnUiThread(() -> {
+                            swipeRefreshLayout.setRefreshing(false);
+                        });
                     }
 
                     @Override
