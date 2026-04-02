@@ -357,6 +357,7 @@
 
 
     <string name="noteMode_plain_edit">Plain edit mode</string>
+    <string name="noteMode_plain_edit_short">Edit</string>
     <string name="noteMode_plain_preview">Plain preview</string>
     <string name="noteMode_rich_edit">Rich edit mode</string>
     <string name="noteMode_remember_last">Remember my last selection</string>

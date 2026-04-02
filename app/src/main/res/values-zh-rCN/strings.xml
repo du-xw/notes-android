@@ -283,6 +283,7 @@
 
 
     <string name="noteMode_plain_edit">普通编辑模式</string>
+    <string name="noteMode_plain_edit_short">编辑</string>
     <string name="noteMode_plain_preview">普通预览模式</string>
     <string name="noteMode_rich_edit">富文本编辑模式</string>
     <string name="noteMode_remember_last">记住我上一次的选择</string>

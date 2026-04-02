@@ -301,6 +301,7 @@
 
 
     <string name="noteMode_plain_edit">普通編輯模式</string>
+    <string name="noteMode_plain_edit_short">編輯</string>
     <string name="noteMode_plain_preview">普通預覽</string>
     <string name="noteMode_rich_edit">增強編輯模式</string>
     <string name="noteMode_remember_last">記住上次選擇</string>

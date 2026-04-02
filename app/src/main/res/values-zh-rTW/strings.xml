@@ -305,6 +305,7 @@
 
 
     <string name="noteMode_plain_edit">純文字編輯模式</string>
+    <string name="noteMode_plain_edit_short">編輯</string>
     <string name="noteMode_plain_preview">純文字預覽</string>
     <string name="noteMode_rich_edit">格式化文字編輯模式</string>
     <string name="noteMode_remember_last">記住上次選擇</string>
